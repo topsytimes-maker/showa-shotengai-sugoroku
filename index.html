@@ -2,12 +2,13 @@
 <html lang="ja"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>昭和商店街標準プラグイン版V325 完成保存候補版</title>
+<title>昭和商店街標準プラグイン版V326 smartphone-tablet-fit</title>
 <style>
-:root{--scale:min(100vw / 1600,100vh / 900);}
+:root{--scale:1;--game-scale:1}
 *{box-sizing:border-box}
-body{margin:0;background:#111;font-family:"Hiragino Sans","Yu Gothic",sans-serif;overflow:hidden;color:#111}
-#game{position:relative;width:1600px;height:900px;transform:scale(var(--scale));transform-origin:top left;background:#fff;overflow:hidden}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#111}
+body{font-family:"Hiragino Sans","Yu Gothic",sans-serif;color:#111}
+#game{position:relative;width:1600px;height:900px;transform:scale(var(--game-scale));transform-origin:top left;background:#fff;overflow:hidden}
 .scene{position:absolute;inset:0;display:none;overflow:hidden}
 .scene.active{display:block}
 .bgFull{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -1286,6 +1287,18 @@ button:hover{filter:brightness(1.12)}
 'use strict';
 const ASSET_PREFIX='';
 const W=1600,H=900,MAX=54,START_MONEY=30000,START_COMMENT='参拝もすんだから買い物にいきましょう';
+function fitGameToViewport(){
+  const game=document.getElementById('game');
+  if(!game)return;
+  const vw=window.innerWidth||document.documentElement.clientWidth||W;
+  const vh=window.innerHeight||document.documentElement.clientHeight||H;
+  const scale=Math.min(vw/W,vh/H);
+  document.documentElement.style.setProperty('--game-scale',String(scale));
+}
+fitGameToViewport();
+window.addEventListener('resize',fitGameToViewport,{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(fitGameToViewport,120),{passive:true});
+window.addEventListener('pageshow',fitGameToViewport,{passive:true});
 const BEST_MONEY_KEY='miyauchiSugorokuBestMoney';
 const $=id=>document.getElementById(id);
 const data=JSON.parse($('shopData').textContent);
@@ -2234,7 +2247,7 @@ function saveInside(){const s=insideSetting(true);s.png=$('insidePngSelect').val
 function saveLocal(){settings.selectedTarget=selected;settings.step=step;localStorage.setItem('showaCoreV4Settings',JSON.stringify(settings));alert('このPCに一時保存しました。');}
 function loadLocal(){const raw=localStorage.getItem('showaCoreV4Settings');if(!raw)return alert('一時保存がありません。');settings=JSON.parse(raw);selected=settings.selectedTarget||selected;step=Number(settings.step||step);preview();}
 function normalizeForSave(root){root.querySelectorAll('.scene').forEach(el=>el.className=el.id==='coverScene'?'scene active':'scene');['firstDiceBtn','enterShopBtn','nextDiceBtn','jumpBtn'].forEach(id=>{const b=root.querySelector('#'+id);if(b)b.style.display='none';});['diceHand','flyingDice','shopOverlay','gameSet','lotteryPlugin','garaponPlugin','loanPlugin','loanChoiceBar','runnerPlugin','child2Plugin','pachinkerPlugin','motorbikePlugin','busPlugin','planePlugin','bicyclePlugin','policemanPlugin'].forEach(id=>{const e=root.querySelector('#'+id);if(e)e.style.display='none';});}
-function downloadHtml(){settings.selectedTarget=selected;settings.step=step;const clone=document.documentElement.cloneNode(true);clone.querySelector('#savedSettings').textContent='\n'+JSON.stringify(settings,null,2)+'\n';clone.querySelector('#shopData').textContent='\n'+JSON.stringify(data,null,2)+'\n';normalizeForSave(clone);const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='昭和商店街標準プラグイン版V325-完成保存候補版.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
+function downloadHtml(){settings.selectedTarget=selected;settings.step=step;const clone=document.documentElement.cloneNode(true);clone.querySelector('#savedSettings').textContent='\n'+JSON.stringify(settings,null,2)+'\n';clone.querySelector('#shopData').textContent='\n'+JSON.stringify(data,null,2)+'\n';normalizeForSave(clone);const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
 function changeSpeechFont(d){settings.speech.font=Math.max(12,Math.min(60,settings.speech.font+d));applySettings();}
 function changeSpeechHeight(d){settings.speech.height=Math.max(40,Math.min(700,settings.speech.height+d));applySettings();}
 function bind(){$('startGameBtn').onclick=startGame;$('firstDiceBtn').onclick=firstDice;$('nextDiceBtn').onclick=nextTurn;$('enterShopBtn').onclick=enterShop;$('jumpBtn').onclick=jumpPlayer;$('replayBtn').onclick=()=>location.reload();$('endGameBtn').onclick=()=>{$('gameSetText').textContent='ゲームを終了しました。';$('replayBtn').style.display='none';$('endGameBtn').style.display='none';};$('pauseGameBtn').onclick=pauseGame;$('resumeGameBtn').onclick=resumeGame;$('restartGameBtn').onclick=restartGame;$('gotoTotalBtn').onclick=gotoTotal;$('devToggle').onclick=()=>$('devPanel').classList.toggle('hidden');$('saveLocalBtn').onclick=saveLocal;$('loadLocalBtn').onclick=loadLocal;$('downloadHtmlBtn').onclick=downloadHtml;$('saveInsideBtn').onclick=saveInside;$('insidePngSelect').onchange=()=>{insideSetting(true).png=$('insidePngSelect').value;applyPlayerStreet('inside');updateInfo();};$('speechFontDownBtn').onclick=()=>changeSpeechFont(-1);$('speechFontUpBtn').onclick=()=>changeSpeechFont(1);$('speechHeightDownBtn').onclick=()=>changeSpeechHeight(-10);$('speechHeightUpBtn').onclick=()=>changeSpeechHeight(10);document.querySelectorAll('#targetButtons button').forEach(b=>b.onclick=()=>{selected=b.dataset.target;preview();});document.querySelectorAll('#stepButtons button').forEach(b=>b.onclick=()=>{step=Number(b.dataset.step);updateInfo();});document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>nudge(b.dataset.move));document.querySelectorAll('[data-size]').forEach(b=>b.onclick=()=>resize(b.dataset.size));}
@@ -4846,7 +4859,7 @@ try{
     normalizeForSave(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V317-実走テスト25番判定修正版.html';
+    a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V317 download patch failed',e);}
@@ -4951,7 +4964,7 @@ try{
     normalizeForSave(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V324-銀行不足時店内キャラ保持修正版.html';
+    a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V318 download patch failed',e);}
@@ -5166,7 +5179,7 @@ try{
     normalizeForSave(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V324-銀行不足時店内キャラ保持修正版.html';
+    a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
