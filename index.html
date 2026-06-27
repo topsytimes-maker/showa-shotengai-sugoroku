@@ -5363,31 +5363,38 @@ function v333SetupPublicControls(){
 v333SetupAudioUnlock();
 v333SetupPublicControls();
 
-/* V335: hit and sound fix candidate
-   V333を親にし、child2本体・plane本体・bicycle移動本体は変更しない。
-   読み上げ4関数、画面scale、宝くじ、銀行借入も変更しない。
+/* V336: hit/sound investigation
+   V333を基準にし、位置・速度・移動本体は変更しない。
+   変更対象は child2接触判定、plane捕獲判定、bell/bushorn音声解除のみ。
 */
 v259Child2IsHit=function(el){
   const player=$('playerStreet');
   if(!player||!el||el.style.display==='none'||jumping||Date.now()<=jumpGraceUntil)return false;
   const pr=v287RectToGameRect(player.getBoundingClientRect());
   const cr=v287RectToGameRect(el.getBoundingClientRect());
-  const playerBox=v287ShrinkRect(pr,0.30,0.30,0.24,0.12);
-  const childBox=v287ShrinkRect(cr,0.24,0.24,0.18,0.08);
+  const playerBox=v287ShrinkRect(pr,0.42,0.42,0.34,0.22);
+  const childBox=v287ShrinkRect(cr,0.40,0.40,0.30,0.20);
   return v287Overlap(playerBox,childBox);
 };
 
-function v335PlaneCatchable(){
+function v336PlaneCatchable(){
   const el=$('planePlugin'),player=$('playerStreet'),r=settings.plane||{};
   if(!el||!player||el.style.display==='none'||gameEnded||paused)return false;
   if(!v319PlaneActive||!v319PlaneJumped||!jumping||v319PlaneCaught)return false;
-  const distance=Math.abs(gameCenterX(el)-gameCenterX(player));
-  return distance<=Number(r.catchDistanceV335||360);
+  const pr=v287RectToGameRect(player.getBoundingClientRect());
+  const er=v287RectToGameRect(el.getBoundingClientRect());
+  const playerCenterX=pr.x+pr.width/2;
+  const planeCenterX=er.x+er.width/2;
+  const playerTop=pr.y;
+  const planeCenterY=er.y+er.height/2;
+  const catchX=Number(r.catchDistanceV336||430);
+  const catchY=Number(r.catchYDistanceV336||760);
+  return Math.abs(planeCenterX-playerCenterX)<=catchX && Math.abs(planeCenterY-playerTop)<=catchY;
 }
 monitorPlane=function(){
   const el=$('planePlugin'),player=$('playerStreet');
   if(!el||!player||el.style.display==='none'||gameEnded){planeMonitorTimer=null;return;}
-  if(v335PlaneCatchable()){
+  if(v336PlaneCatchable()){
     v319PlaneCaught=true;
     planeCaught=true;
     stopWalk();
@@ -5409,27 +5416,32 @@ v309PlayBicycleBell2=function(){
     a.currentTime=0;
     if(a.readyState===0)a.load();
     const p=a.play();
-    if(p&&p.catch)p.catch(err=>console.warn('[V335 bell2 blocked]',a.src,err));
+    if(p&&p.catch)p.catch(err=>console.warn('[V336 bell2 blocked]',a.src,err));
   }catch(e){
-    console.warn('[V335 bell2 error]',e);
+    console.warn('[V336 bell2 error]',e);
   }
   return Promise.resolve();
 };
 
-function __showaV335Check(){
+playBusHornOnce=function(){
+  const a=$('busHornSfx')||busHornAudio;
+  v333PlayEventAudio(a,'busHornSfx');
+};
+
+function __showaV336Check(){
   const source=Array.from(document.scripts).map(s=>s.textContent||'').join('\n');
   return {
     parent:'V333',
     investigationMode:INVESTIGATION_MODE,
-    child2PositionPreserved:source.includes("left:'1720px'")&&source.includes('endX=760')&&source.includes('duration=5200'),
-    child2HitOnlyChanged:String(v259Child2IsHit).includes('0.30')&&String(v259Child2IsHit).includes('0.24'),
-    planeMotionPreserved:String(startPlane).includes('speedMs||6800')&&String(startPlane).includes("plane'+(frame+1)+'.png"),
-    planeCatchOnlyChanged:String(monitorPlane).includes('v335PlaneCatchable'),
-    bell2Override:String(v309PlayBicycleBell2).includes('[V335 bell2'),
+    child2BodyPreserved:source.includes("left:'1720px'")&&source.includes('endX=760')&&source.includes('duration=5200'),
+    child2HitTight:String(v259Child2IsHit).includes('0.42')&&String(v259Child2IsHit).includes('0.40'),
+    planeBodyPreserved:source.includes('speedMs||6800')&&source.includes("plane'+(frame+1)+'.png")&&source.includes('xEnd??1700'),
+    planeCatchAdjusted:String(monitorPlane).includes('v336PlaneCatchable'),
+    bicycleMovementUntouched:source.includes('async function startV308BicycleEvent')&&source.includes("width:'528px'")&&source.includes("bottom:'40px'"),
     silentUnlock:String(v333UnlockEventAudio).includes('defaultMuted')&&String(v333UnlockEventAudio).includes("setAttribute('muted'")
   };
 }
-window.__showaV335Check=__showaV335Check;
+window.__showaV336Check=__showaV336Check;
 
 try{
   downloadHtml=function(){
@@ -5441,7 +5453,7 @@ try{
     v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V335-hit-and-sound-fix-candidate.html';
+    a.download='昭和商店街標準プラグイン版V336-hit-sound-investigation.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
