@@ -105,6 +105,43 @@ button:hover{filter:brightness(1.12)}
 #loanPlugin{z-index:430!important}
 #loanContent{z-index:440!important}
 
+/* V333: 公開準備。既存レイアウトは触らず、左下の終了ボタンだけ追加する。 */
+#publicEndGameBtn{
+  position:absolute;
+  left:18px;
+  bottom:18px;
+  z-index:3200;
+  font-size:20px;
+  padding:10px 18px;
+  border-radius:12px;
+  background:#b91c1c;
+  color:#fff;
+  border:2px solid rgba(255,255,255,.75);
+  box-shadow:0 5px 14px rgba(0,0,0,.26);
+}
+#publicEndConfirm{
+  position:absolute;
+  inset:0;
+  z-index:5100;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.35);
+  color:#111;
+}
+#publicEndConfirmCard{
+  background:rgba(255,255,255,.96);
+  border:3px solid #8b4513;
+  border-radius:18px;
+  padding:26px 34px;
+  min-width:360px;
+  text-align:center;
+  box-shadow:0 10px 28px rgba(0,0,0,.3);
+}
+#publicEndConfirmCard .msg{font-size:26px;font-weight:700;margin-bottom:20px}
+#publicEndConfirmCard button{font-size:22px;padding:10px 22px;margin:0 8px;border-radius:12px}
+.v333-public-hidden{display:none!important}
+
 </style>
 </head>
 <body>
@@ -191,6 +228,15 @@ button:hover{filter:brightness(1.12)}
   <div id="loanChoiceBar">
     <button id="loanGoBankChoiceBtn">銀行へ行く</button>
     <button id="loanGameSetChoiceBtn">ゲームセット</button>
+  </div>
+
+  <button id="publicEndGameBtn" type="button">ゲーム終了</button>
+  <div id="publicEndConfirm">
+    <div id="publicEndConfirmCard">
+      <div class="msg">ゲームを終了しますか？</div>
+      <button id="publicEndYesBtn" type="button">はい</button>
+      <button id="publicEndNoBtn" type="button">いいえ</button>
+    </div>
   </div>
 
   <button id="devToggle">調整パネル 表示/非表示</button>
@@ -1286,6 +1332,8 @@ button:hover{filter:brightness(1.12)}
 (() => {
 'use strict';
 const ASSET_PREFIX='';
+const PUBLIC_MODE=true;
+const INVESTIGATION_MODE=true;
 const W=1600,H=900,MAX=54,START_MONEY=30000,START_COMMENT='参拝もすんだから買い物にいきましょう';
 function fitGameToViewport(){
   const game=document.getElementById('game');
@@ -1394,7 +1442,11 @@ function stopStart(){startAudio.pause();}
 function playWalk(){stopStart();play(walkAudio);}
 function stopWalk(){walkAudio.pause();}
 function playShopSfx(){if(Number(total)===10&&fanfareAudio){fanfareAudio.currentTime=0;play(fanfareAudio);}}
-function prepareVoices(){if(!('speechSynthesis'in window))return;voices=speechSynthesis.getVoices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'));}
+function prepareVoices(){
+  if(!('speechSynthesis'in window))return;
+  const list=speechSynthesis.getVoices?speechSynthesis.getVoices():[];
+  voices=list.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'));
+}
 let mobileSpeechPrimed=false;
 function primeMobileSpeech(){
   if(!('speechSynthesis'in window))return;
@@ -1402,12 +1454,14 @@ function primeMobileSpeech(){
   if(mobileSpeechPrimed)return;
   mobileSpeechPrimed=true;
   try{
-    const u=new SpeechSynthesisUtterance(' ');
+    const kyoko=voices.find(v=>String(v.name||'').toLowerCase()==='kyoko');
+    const u=new SpeechSynthesisUtterance('あ');
     u.lang='ja-JP';u.volume=0.01;u.rate=1;u.pitch=1;
+    if(kyoko)u.voice=kyoko;
     speechSynthesis.speak(u);
   }catch(e){}
 }
-function waitAfterSpeechCancel(){return new Promise(resolve=>setTimeout(resolve,90));}
+function waitAfterSpeechCancel(){return new Promise(resolve=>setTimeout(resolve,120));}
 if('speechSynthesis'in window){
   speechSynthesis.onvoiceschanged=prepareVoices;
   speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',prepareVoices);
@@ -1418,20 +1472,34 @@ if('speechSynthesis'in window){
 function splitNatural(t){return String(t||'').split(/([、。！？…\s　]+)/).map(s=>s.trim()).filter(Boolean);}
 function speak(t,role){return new Promise(resolve=>{
   if(!t||!('speechSynthesis'in window))return resolve();
+  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
   primeMobileSpeech();
-  speechSynthesis.cancel();prepareVoices();duckBgmsForSpeech();
-  const parts=splitNatural(t);let i=0,finished=false;const voice=role==='shop'?(voices[1]||voices[0]):(voices[0]||voices[1]);
-  function done(){if(finished)return;finished=true;restoreBgmsAfterSpeech();resolve();}
+  try{if(!ios||speechSynthesis.speaking||speechSynthesis.pending)speechSynthesis.cancel();}catch(e){}
+  prepareVoices();duckBgmsForSpeech();
+  const parts=splitNatural(t);let i=0,finished=false;
+  const maxTotalMs=Math.min(5200,Math.max(1800,String(t).length*130));
+  const totalFallback=setTimeout(()=>done(),maxTotalMs);
+  function selectVoice(){
+    const list=(speechSynthesis.getVoices&&speechSynthesis.getVoices())||[];
+    const kyoko=list.find(v=>String(v.name||'').toLowerCase()==='kyoko');
+    const jaJP=list.find(v=>String(v.lang||'').toLowerCase()==='ja-jp');
+    const fallback=role==='shop'?(voices[1]||voices[0]):(voices[0]||voices[1]);
+    return kyoko||jaJP||fallback||null;
+  }
+  function done(){if(finished)return;finished=true;clearTimeout(totalFallback);restoreBgmsAfterSpeech();resolve();}
   function next(){
     if(i>=parts.length)return done();
     const p=parts[i++];
     if(/^[、。！？…\s　]+$/.test(p))return setTimeout(next,p.match(/[。！？]/)?500:260);
+    prepareVoices();
+    const voice=selectVoice();
     const u=new SpeechSynthesisUtterance(p);u.lang='ja-JP';u.rate=.86;u.pitch=role==='male'?.72:(role==='shop'?1.12:.92);u.volume=1;
     if(voice)u.voice=voice;
-    let advanced=false;const fallback=setTimeout(advance,Math.max(3000,p.length*550));
+    try{console.log('[V332 speak voice]',voice?voice.name:'default',voice?voice.lang:'');}catch(e){}
+    let advanced=false;const fallback=setTimeout(advance,Math.min(2600,Math.max(1000,p.length*180)));
     function advance(){if(advanced)return;advanced=true;clearTimeout(fallback);next();}
     u.onend=advance;u.onerror=advance;
-    try{speechSynthesis.speak(u);}catch(e){advance();}
+    try{if(speechSynthesis.paused&&speechSynthesis.resume)speechSynthesis.resume();speechSynthesis.speak(u);}catch(e){advance();}
   }
   waitAfterSpeechCancel().then(next);
 });}
@@ -5191,6 +5259,178 @@ arrive=function(){
   return r;
 };
 
+/* V333: public preparation
+   - 読み上げ関数は変更しない。
+   - bus/bicycleのMP3は、最初の操作で音声要素を起こしてから再生する。
+   - 開発者専用UIは PUBLIC_MODE で表示/非表示を切り替える。
+*/
+let v333EventAudioUnlocked=false;
+function v333UnlockEventAudio(){
+  if(v333EventAudioUnlocked)return;
+  v333EventAudioUnlocked=true;
+  [busHornAudio,bellAudio].forEach(a=>{
+    if(!a)return;
+    try{
+      const oldMuted=a.muted, oldDefaultMuted=a.defaultMuted, oldVolume=a.volume;
+      a.muted=true;
+      a.defaultMuted=true;
+      a.setAttribute('muted','');
+      a.volume=0;
+      a.currentTime=0;
+      const p=a.play();
+      const restore=()=>{
+        try{
+          a.pause();
+          a.currentTime=0;
+          a.muted=oldMuted;
+          a.defaultMuted=oldDefaultMuted;
+          if(!oldMuted&&!oldDefaultMuted)a.removeAttribute('muted');
+          a.volume=oldVolume;
+        }catch(e){}
+      };
+      if(p&&p.then)p.then(()=>setTimeout(restore,220)).catch(()=>setTimeout(restore,220));
+      else restore();
+    }catch(e){}
+  });
+}
+function v333PlayEventAudio(a,label){
+  if(!a||gameEnded)return;
+  try{
+    a.muted=false;
+    a.volume=1;
+    a.currentTime=0;
+    const p=a.play();
+    if(p&&p.catch)p.catch(err=>console.warn('[V333 event audio blocked]',label||a.id||a.src,err));
+  }catch(e){
+    console.warn('[V333 event audio error]',label||'',e);
+  }
+}
+function v333SetupAudioUnlock(){
+  ['startGameBtn','firstDiceBtn','nextDiceBtn','enterShopBtn','jumpBtn','publicEndGameBtn'].forEach(id=>{
+    const el=$(id);
+    if(el)el.addEventListener('pointerdown',v333UnlockEventAudio,{capture:true,passive:true});
+    if(el)el.addEventListener('click',v333UnlockEventAudio,{capture:true,passive:true});
+  });
+  document.addEventListener('touchstart',v333UnlockEventAudio,{once:true,capture:true,passive:true});
+  document.addEventListener('mousedown',v333UnlockEventAudio,{once:true,capture:true});
+  document.addEventListener('keydown',v333UnlockEventAudio,{once:true,capture:true});
+}
+playBusHornOnce=function(){
+  const a=$('busHornSfx')||busHornAudio;
+  v333PlayEventAudio(a,'busHornSfx');
+};
+v309PlayBicycleBell2=function(){
+  const a=$('bellSfx')||bellAudio;
+  v333PlayEventAudio(a,'bellSfx');
+  return Promise.resolve();
+};
+function v333ShowEndConfirm(){
+  const c=$('publicEndConfirm');
+  if(c)c.style.display='flex';
+}
+function v333HideEndConfirm(){
+  const c=$('publicEndConfirm');
+  if(c)c.style.display='none';
+}
+function v333ConfirmEndGame(){
+  v333HideEndConfirm();
+  gameSet('ゲームを終了しました。');
+}
+function v333ApplyPublicModeToRoot(root){
+  const scope=root||document;
+  const hideDev=!!PUBLIC_MODE&&!INVESTIGATION_MODE;
+  const ids=[
+    'devToggle','devPanel',
+    'v311TestPanel','v315RealRunPanel','v315RunBtn'
+  ];
+  ids.forEach(id=>{
+    const el=scope.getElementById?scope.getElementById(id):(scope.querySelector?scope.querySelector('#'+id):null);
+    if(el)el.classList.toggle('v333-public-hidden',hideDev);
+  });
+  scope.querySelectorAll&&scope.querySelectorAll('[id^="v311"],[id^="v315"]').forEach(el=>{
+    el.classList.toggle('v333-public-hidden',hideDev);
+  });
+}
+function v333SetupPublicControls(){
+  const endBtn=$('publicEndGameBtn'),yes=$('publicEndYesBtn'),no=$('publicEndNoBtn');
+  if(endBtn)endBtn.onclick=v333ShowEndConfirm;
+  if(yes)yes.onclick=v333ConfirmEndGame;
+  if(no)no.onclick=v333HideEndConfirm;
+  v333ApplyPublicModeToRoot(document);
+  setTimeout(()=>v333ApplyPublicModeToRoot(document),500);
+  setTimeout(()=>v333ApplyPublicModeToRoot(document),1300);
+}
+v333SetupAudioUnlock();
+v333SetupPublicControls();
+
+/* V335: hit and sound fix candidate
+   V333を親にし、child2本体・plane本体・bicycle移動本体は変更しない。
+   読み上げ4関数、画面scale、宝くじ、銀行借入も変更しない。
+*/
+v259Child2IsHit=function(el){
+  const player=$('playerStreet');
+  if(!player||!el||el.style.display==='none'||jumping||Date.now()<=jumpGraceUntil)return false;
+  const pr=v287RectToGameRect(player.getBoundingClientRect());
+  const cr=v287RectToGameRect(el.getBoundingClientRect());
+  const playerBox=v287ShrinkRect(pr,0.30,0.30,0.24,0.12);
+  const childBox=v287ShrinkRect(cr,0.24,0.24,0.18,0.08);
+  return v287Overlap(playerBox,childBox);
+};
+
+function v335PlaneCatchable(){
+  const el=$('planePlugin'),player=$('playerStreet'),r=settings.plane||{};
+  if(!el||!player||el.style.display==='none'||gameEnded||paused)return false;
+  if(!v319PlaneActive||!v319PlaneJumped||!jumping||v319PlaneCaught)return false;
+  const distance=Math.abs(gameCenterX(el)-gameCenterX(player));
+  return distance<=Number(r.catchDistanceV335||360);
+}
+monitorPlane=function(){
+  const el=$('planePlugin'),player=$('playerStreet');
+  if(!el||!player||el.style.display==='none'||gameEnded){planeMonitorTimer=null;return;}
+  if(v335PlaneCatchable()){
+    v319PlaneCaught=true;
+    planeCaught=true;
+    stopWalk();
+    v319ClearPlaneTimers();
+    v319HidePlane();
+    endPriorityEvent('plane');
+  }
+  planeMonitorTimer=requestAnimationFrame(monitorPlane);
+};
+
+v309PlayBicycleBell2=function(){
+  const a=$('bellSfx')||bellAudio;
+  if(!a||gameEnded)return Promise.resolve();
+  try{
+    a.muted=false;
+    a.defaultMuted=false;
+    a.removeAttribute('muted');
+    a.volume=1;
+    a.currentTime=0;
+    if(a.readyState===0)a.load();
+    const p=a.play();
+    if(p&&p.catch)p.catch(err=>console.warn('[V335 bell2 blocked]',a.src,err));
+  }catch(e){
+    console.warn('[V335 bell2 error]',e);
+  }
+  return Promise.resolve();
+};
+
+function __showaV335Check(){
+  const source=Array.from(document.scripts).map(s=>s.textContent||'').join('\n');
+  return {
+    parent:'V333',
+    investigationMode:INVESTIGATION_MODE,
+    child2PositionPreserved:source.includes("left:'1720px'")&&source.includes('endX=760')&&source.includes('duration=5200'),
+    child2HitOnlyChanged:String(v259Child2IsHit).includes('0.30')&&String(v259Child2IsHit).includes('0.24'),
+    planeMotionPreserved:String(startPlane).includes('speedMs||6800')&&String(startPlane).includes("plane'+(frame+1)+'.png"),
+    planeCatchOnlyChanged:String(monitorPlane).includes('v335PlaneCatchable'),
+    bell2Override:String(v309PlayBicycleBell2).includes('[V335 bell2'),
+    silentUnlock:String(v333UnlockEventAudio).includes('defaultMuted')&&String(v333UnlockEventAudio).includes("setAttribute('muted'")
+  };
+}
+window.__showaV335Check=__showaV335Check;
+
 try{
   downloadHtml=function(){
     settings.selectedTarget=selected;settings.step=step;
@@ -5198,9 +5438,10 @@ try{
     clone.querySelector('#savedSettings').textContent='\n'+JSON.stringify(settings,null,2)+'\n';
     clone.querySelector('#shopData').textContent='\n'+JSON.stringify(data,null,2)+'\n';
     normalizeForSave(clone);
+    v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準版V327-mobile-speech-fix.html';
+    a.download='昭和商店街標準プラグイン版V335-hit-and-sound-fix-candidate.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
