@@ -1333,6 +1333,7 @@ button:hover{filter:brightness(1.12)}
 'use strict';
 const ASSET_PREFIX='';
 const PUBLIC_MODE=true;
+const INVESTIGATION_MODE=true;
 const W=1600,H=900,MAX=54,START_MONEY=30000,START_COMMENT='参拝もすんだから買い物にいきましょう';
 function fitGameToViewport(){
   const game=document.getElementById('game');
@@ -5270,10 +5271,10 @@ function v333UnlockEventAudio(){
   [busHornAudio,bellAudio].forEach(a=>{
     if(!a)return;
     try{
-      const oldMuted=a.muted, oldVolume=a.volume;
+      const oldMuted=a.muted, oldDefaultMuted=a.defaultMuted, oldVolume=a.volume;
+      a.muted=true;
       a.defaultMuted=true;
       a.setAttribute('muted','');
-      a.muted=true;
       a.volume=0;
       a.currentTime=0;
       const p=a.play();
@@ -5282,13 +5283,13 @@ function v333UnlockEventAudio(){
           a.pause();
           a.currentTime=0;
           a.muted=oldMuted;
-          a.defaultMuted=oldMuted;
-          if(!oldMuted)a.removeAttribute('muted');
+          a.defaultMuted=oldDefaultMuted;
+          if(!oldMuted&&!oldDefaultMuted)a.removeAttribute('muted');
           a.volume=oldVolume;
         }catch(e){}
       };
-      setTimeout(restore,220);
-      if(p&&p.catch)p.catch(restore);
+      if(p&&p.then)p.then(()=>setTimeout(restore,220)).catch(()=>setTimeout(restore,220));
+      else restore();
     }catch(e){}
   });
 }
@@ -5337,16 +5338,17 @@ function v333ConfirmEndGame(){
 }
 function v333ApplyPublicModeToRoot(root){
   const scope=root||document;
+  const hideDev=!!PUBLIC_MODE&&!INVESTIGATION_MODE;
   const ids=[
     'devToggle','devPanel',
     'v311TestPanel','v315RealRunPanel','v315RunBtn'
   ];
   ids.forEach(id=>{
     const el=scope.getElementById?scope.getElementById(id):(scope.querySelector?scope.querySelector('#'+id):null);
-    if(el)el.classList.toggle('v333-public-hidden',!!PUBLIC_MODE);
+    if(el)el.classList.toggle('v333-public-hidden',hideDev);
   });
   scope.querySelectorAll&&scope.querySelectorAll('[id^="v311"],[id^="v315"]').forEach(el=>{
-    el.classList.toggle('v333-public-hidden',!!PUBLIC_MODE);
+    el.classList.toggle('v333-public-hidden',hideDev);
   });
 }
 function v333SetupPublicControls(){
@@ -5361,153 +5363,73 @@ function v333SetupPublicControls(){
 v333SetupAudioUnlock();
 v333SetupPublicControls();
 
-/* V334: event hit/sound candidate
-   V333/V332の読み上げ、scale、PUBLIC_MODE、左下終了ボタンは変更しない。
+/* V335: hit and sound fix candidate
+   V333を親にし、child2本体・plane本体・bicycle移動本体は変更しない。
+   読み上げ4関数、画面scale、宝くじ、銀行借入も変更しない。
 */
-function v334ToGameRect(rect){
-  const game=$('game');
-  const gr=game.getBoundingClientRect();
-  const scale=gr.width/W||1;
-  return {
-    left:(rect.left-gr.left)/scale,
-    right:(rect.right-gr.left)/scale,
-    top:(rect.top-gr.top)/scale,
-    bottom:(rect.bottom-gr.top)/scale,
-    width:rect.width/scale,
-    height:rect.height/scale
-  };
-}
-function v334RectOverlap(a,b){
-  return !(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
-}
-function v334Shrink(r,l,rgt,t,b){
-  return {
-    left:r.left+r.width*l,
-    right:r.right-r.width*rgt,
-    top:r.top+r.height*t,
-    bottom:r.bottom-r.height*b,
-    width:r.width*(1-l-rgt),
-    height:r.height*(1-t-b)
-  };
-}
-function v334PlayerBodyBox(){
-  const p=$('playerStreet');
-  if(!p)return null;
-  const pr=v334ToGameRect(p.getBoundingClientRect());
-  return v334Shrink(pr,.36,.36,.22,.12);
-}
-function v334ChildBodyBox(el){
-  const cr=v334ToGameRect(el.getBoundingClientRect());
-  return v334Shrink(cr,.28,.28,.18,.10);
-}
 v259Child2IsHit=function(el){
-  if(!el||el.style.display==='none'||el.dataset.collision==='off'||jumping||Date.now()<=jumpGraceUntil)return false;
-  const playerBox=v334PlayerBodyBox();
-  if(!playerBox)return false;
-  const childBox=v334ChildBodyBox(el);
-  return v334RectOverlap(playerBox,childBox);
+  const player=$('playerStreet');
+  if(!player||!el||el.style.display==='none'||jumping||Date.now()<=jumpGraceUntil)return false;
+  const pr=v287RectToGameRect(player.getBoundingClientRect());
+  const cr=v287RectToGameRect(el.getBoundingClientRect());
+  const playerBox=v287ShrinkRect(pr,0.30,0.30,0.24,0.12);
+  const childBox=v287ShrinkRect(cr,0.24,0.24,0.18,0.08);
+  return v287Overlap(playerBox,childBox);
 };
-startV259Child2FromLeftBackground18=function(){
-  if(gameEnded||v259Child2Active||v288Child2Triggered)return false;
-  if(typeof v290CanStartPlugin==='function'&&!v290CanStartPlugin('child2'))return false;
-  if(typeof v290MarkPluginStarted==='function')v290MarkPluginStarted('child2');
-  v288Child2Triggered=true;
-  v288Child2Scheduled=false;
-  v259RemoveChild2();
-  v288RemoveFreshChild2();
-  v259Child2Active=true;
-  v259Child2Hit=false;
-  child2EventActive=true;
-  beginPriorityEvent('child2');
-  $('enterShopBtn').style.display='none';
-  $('nextDiceBtn').style.display='none';
-  $('jumpBtn').style.display='block';
 
-  const el=document.createElement('img');
-  el.id='freshChild2Plugin';
-  el.alt='child2';
-  el.src=ASSET_PREFIX+'child2.png';
-  el.onerror=function(){if(!el.dataset.fallbackChild){el.dataset.fallbackChild='1';el.src=ASSET_PREFIX+'child.png';}};
-  const c=settings.child2||{};
-  const playerBox=v334PlayerBodyBox();
-  const playerCenterX=playerBox?(playerBox.left+playerBox.right)/2:800;
-  const playerCenterY=playerBox?(playerBox.top+playerBox.bottom)/2:560;
-  const startX=Number(c.xStart??1700);
-  const width=Number(c.width??244);
-  const y=Number(c.y??529);
-  const endX=playerCenterX-100;
-  const endY=Math.max(0,playerCenterY-50);
-  const duration=Number(c.speedMs??3200);
-  Object.assign(el.style,{
-    position:'absolute',display:'block',visibility:'visible',opacity:'1',pointerEvents:'none',
-    objectFit:'contain',zIndex:'10020',transition:'none',left:startX+'px',top:y+'px',width:width+'px'
-  });
-  el.dataset.collision='on';
-  $('streetScene').appendChild(el);
-
-  const begin=performance.now();
-  function frame(now){
-    if(gameEnded||!v259Child2Active||!document.body.contains(el)){
-      finishV259Child2Event();
-      return;
-    }
-    const t=Math.min(1,Math.max(0,(now-begin)/duration));
-    const eased=1-Math.pow(1-t,2);
-    el.style.left=(startX+(endX-startX)*eased)+'px';
-    el.style.top=(y+(endY-y)*eased)+'px';
-    if(!v259Child2Hit&&!jumping&&Date.now()>jumpGraceUntil&&v259Child2IsHit(el)){
-      v259Child2Hit=true;
-      el.dataset.collision='off';
-      runnerHit();
-    }
-    if(t<1){
-      v259Child2Raf=requestAnimationFrame(frame);
-    }else{
-      el.dataset.collision='off';
-      setTimeout(()=>finishV259Child2Event(),1000);
-    }
-  }
-  v259Child2Raf=requestAnimationFrame(frame);
-  return true;
-};
-function v334PlaneIsCatchable(){
+function v335PlaneCatchable(){
   const el=$('planePlugin'),player=$('playerStreet'),r=settings.plane||{};
-  if(!el||!player||el.style.display==='none'||!v319PlaneActive||!v319PlaneJumped||!jumping||v319PlaneCaught)return false;
+  if(!el||!player||el.style.display==='none'||gameEnded||paused)return false;
+  if(!v319PlaneActive||!v319PlaneJumped||!jumping||v319PlaneCaught)return false;
   const distance=Math.abs(gameCenterX(el)-gameCenterX(player));
-  return distance<=Number(r.catchDistance||280);
+  return distance<=Number(r.catchDistanceV335||360);
 }
 monitorPlane=function(){
   const el=$('planePlugin'),player=$('playerStreet');
   if(!el||!player||el.style.display==='none'||gameEnded){planeMonitorTimer=null;return;}
-  if(!paused&&v334PlaneIsCatchable()){
+  if(v335PlaneCatchable()){
     v319PlaneCaught=true;
     planeCaught=true;
     stopWalk();
     v319ClearPlaneTimers();
     v319HidePlane();
     endPriorityEvent('plane');
-    return;
   }
   planeMonitorTimer=requestAnimationFrame(monitorPlane);
 };
-const v334JumpPlayerBase=jumpPlayer;
-jumpPlayer=function(){
-  const r=settings.plane||{};
-  if(planeIsVisible()&&v319PlaneActive){
-    r.catchDistance=Math.max(Number(r.catchDistance||0),280);
+
+v309PlayBicycleBell2=function(){
+  const a=$('bellSfx')||bellAudio;
+  if(!a||gameEnded)return Promise.resolve();
+  try{
+    a.muted=false;
+    a.defaultMuted=false;
+    a.removeAttribute('muted');
+    a.volume=1;
+    a.currentTime=0;
+    if(a.readyState===0)a.load();
+    const p=a.play();
+    if(p&&p.catch)p.catch(err=>console.warn('[V335 bell2 blocked]',a.src,err));
+  }catch(e){
+    console.warn('[V335 bell2 error]',e);
   }
-  return v334JumpPlayerBase.apply(this,arguments);
+  return Promise.resolve();
 };
-function __showaV334Check(){
+
+function __showaV335Check(){
+  const source=Array.from(document.scripts).map(s=>s.textContent||'').join('\n');
   return {
-    publicMode: PUBLIC_MODE===true,
-    child2CollisionOn: String(v259Child2IsHit).includes('v334ChildBodyBox')&&String(startV259Child2FromLeftBackground18).includes("dataset.collision='off'"),
-    planeCatchEnabled: String(monitorPlane).includes('v334PlaneIsCatchable')&&Number((settings.plane||{}).catchDistance||280)>=130,
-    silentUnlock: String(v333UnlockEventAudio).includes('defaultMuted')&&String(v333UnlockEventAudio).includes('volume=0'),
-    speechUnchangedGuard: typeof speak==='function'&&typeof prepareVoices==='function'
+    parent:'V333',
+    investigationMode:INVESTIGATION_MODE,
+    child2PositionPreserved:source.includes("left:'1720px'")&&source.includes('endX=760')&&source.includes('duration=5200'),
+    child2HitOnlyChanged:String(v259Child2IsHit).includes('0.30')&&String(v259Child2IsHit).includes('0.24'),
+    planeMotionPreserved:String(startPlane).includes('speedMs||6800')&&String(startPlane).includes("plane'+(frame+1)+'.png"),
+    planeCatchOnlyChanged:String(monitorPlane).includes('v335PlaneCatchable'),
+    bell2Override:String(v309PlayBicycleBell2).includes('[V335 bell2'),
+    silentUnlock:String(v333UnlockEventAudio).includes('defaultMuted')&&String(v333UnlockEventAudio).includes("setAttribute('muted'")
   };
 }
-window.__showaV334Check=__showaV334Check;
+window.__showaV335Check=__showaV335Check;
 
 try{
   downloadHtml=function(){
@@ -5519,7 +5441,7 @@ try{
     v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V334-event-sound-hit-fix-candidate.html';
+    a.download='昭和商店街標準プラグイン版V335-hit-and-sound-fix-candidate.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
