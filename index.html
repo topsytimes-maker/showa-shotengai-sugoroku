@@ -2,7 +2,7 @@
 <html lang="ja"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>昭和商店街標準プラグイン版V326 smartphone-tablet-fit</title>
+<title>昭和商店街標準プラグイン版V327 mobile-speech-fix</title>
 <style>
 :root{--scale:1;--game-scale:1}
 *{box-sizing:border-box}
@@ -1394,15 +1394,43 @@ function stopStart(){startAudio.pause();}
 function playWalk(){stopStart();play(walkAudio);}
 function stopWalk(){walkAudio.pause();}
 function playShopSfx(){if(Number(total)===10&&fanfareAudio){fanfareAudio.currentTime=0;play(fanfareAudio);}}
-function prepareVoices(){if(!speechSynthesis)return;voices=speechSynthesis.getVoices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'));}
-if('speechSynthesis'in window){speechSynthesis.onvoiceschanged=prepareVoices;prepareVoices();}
+function prepareVoices(){
+  if(!('speechSynthesis'in window))return;
+  const list=speechSynthesis.getVoices?speechSynthesis.getVoices():[];
+  voices=list.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'));
+}
+let mobileSpeechPrimed=false;
+function primeMobileSpeech(){
+  if(!('speechSynthesis'in window))return;
+  prepareVoices();
+  if(mobileSpeechPrimed)return;
+  mobileSpeechPrimed=true;
+  try{
+    const kyoko=voices.find(v=>String(v.name||'').toLowerCase()==='kyoko');
+    const u=new SpeechSynthesisUtterance('あ');
+    u.lang='ja-JP';u.volume=0.01;u.rate=1;u.pitch=1;
+    if(kyoko)u.voice=kyoko;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function waitAfterSpeechCancel(){return new Promise(resolve=>setTimeout(resolve,120));}
+if('speechSynthesis'in window){
+  speechSynthesis.onvoiceschanged=prepareVoices;
+  speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',prepareVoices);
+  prepareVoices();
+  const startSpeechUnlockBtn=document.getElementById('startGameBtn');
+  if(startSpeechUnlockBtn)startSpeechUnlockBtn.addEventListener('click',primeMobileSpeech,{capture:true,passive:true});
+}
 function splitNatural(t){return String(t||'').split(/([、。！？…\s　]+)/).map(s=>s.trim()).filter(Boolean);}
 function speak(t,role){return new Promise(resolve=>{
   if(!t||!('speechSynthesis'in window))return resolve();
   const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+  primeMobileSpeech();
   try{if(!ios||speechSynthesis.speaking||speechSynthesis.pending)speechSynthesis.cancel();}catch(e){}
   prepareVoices();duckBgmsForSpeech();
   const parts=splitNatural(t);let i=0,finished=false;
+  const maxTotalMs=Math.min(5200,Math.max(1800,String(t).length*130));
+  const totalFallback=setTimeout(()=>done(),maxTotalMs);
   function selectVoice(){
     const list=(speechSynthesis.getVoices&&speechSynthesis.getVoices())||[];
     const kyoko=list.find(v=>String(v.name||'').toLowerCase()==='kyoko');
@@ -1410,7 +1438,7 @@ function speak(t,role){return new Promise(resolve=>{
     const fallback=role==='shop'?(voices[1]||voices[0]):(voices[0]||voices[1]);
     return kyoko||jaJP||fallback||null;
   }
-  function done(){if(finished)return;finished=true;restoreBgmsAfterSpeech();resolve();}
+  function done(){if(finished)return;finished=true;clearTimeout(totalFallback);restoreBgmsAfterSpeech();resolve();}
   function next(){
     if(i>=parts.length)return done();
     const p=parts[i++];
@@ -1419,13 +1447,13 @@ function speak(t,role){return new Promise(resolve=>{
     const voice=selectVoice();
     const u=new SpeechSynthesisUtterance(p);u.lang='ja-JP';u.rate=.86;u.pitch=role==='male'?.72:(role==='shop'?1.12:.92);u.volume=1;
     if(voice)u.voice=voice;
-    try{console.log('[V331 speak voice]',voice?voice.name:'default',voice?voice.lang:'');}catch(e){}
-    let advanced=false;const fallback=setTimeout(advance,Math.max(3000,p.length*550));
+    try{console.log('[V332 speak voice]',voice?voice.name:'default',voice?voice.lang:'');}catch(e){}
+    let advanced=false;const fallback=setTimeout(advance,Math.min(2600,Math.max(1000,p.length*180)));
     function advance(){if(advanced)return;advanced=true;clearTimeout(fallback);next();}
     u.onend=advance;u.onerror=advance;
-    try{speechSynthesis.speak(u);}catch(e){advance();}
+    try{if(speechSynthesis.paused&&speechSynthesis.resume)speechSynthesis.resume();speechSynthesis.speak(u);}catch(e){advance();}
   }
-  next();
+  waitAfterSpeechCancel().then(next);
 });}
 function safe(t){return String(t||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function quote(t){return t?'「'+safe(t)+'」':'';}
@@ -2259,7 +2287,7 @@ function saveInside(){const s=insideSetting(true);s.png=$('insidePngSelect').val
 function saveLocal(){settings.selectedTarget=selected;settings.step=step;localStorage.setItem('showaCoreV4Settings',JSON.stringify(settings));alert('このPCに一時保存しました。');}
 function loadLocal(){const raw=localStorage.getItem('showaCoreV4Settings');if(!raw)return alert('一時保存がありません。');settings=JSON.parse(raw);selected=settings.selectedTarget||selected;step=Number(settings.step||step);preview();}
 function normalizeForSave(root){root.querySelectorAll('.scene').forEach(el=>el.className=el.id==='coverScene'?'scene active':'scene');['firstDiceBtn','enterShopBtn','nextDiceBtn','jumpBtn'].forEach(id=>{const b=root.querySelector('#'+id);if(b)b.style.display='none';});['diceHand','flyingDice','shopOverlay','gameSet','lotteryPlugin','garaponPlugin','loanPlugin','loanChoiceBar','runnerPlugin','child2Plugin','pachinkerPlugin','motorbikePlugin','busPlugin','planePlugin','bicyclePlugin','policemanPlugin'].forEach(id=>{const e=root.querySelector('#'+id);if(e)e.style.display='none';});}
-function downloadHtml(){settings.selectedTarget=selected;settings.step=step;const clone=document.documentElement.cloneNode(true);clone.querySelector('#savedSettings').textContent='\n'+JSON.stringify(settings,null,2)+'\n';clone.querySelector('#shopData').textContent='\n'+JSON.stringify(data,null,2)+'\n';normalizeForSave(clone);const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
+function downloadHtml(){settings.selectedTarget=selected;settings.step=step;const clone=document.documentElement.cloneNode(true);clone.querySelector('#savedSettings').textContent='\n'+JSON.stringify(settings,null,2)+'\n';clone.querySelector('#shopData').textContent='\n'+JSON.stringify(data,null,2)+'\n';normalizeForSave(clone);const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='昭和商店街標準版V327-mobile-speech-fix.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
 function changeSpeechFont(d){settings.speech.font=Math.max(12,Math.min(60,settings.speech.font+d));applySettings();}
 function changeSpeechHeight(d){settings.speech.height=Math.max(40,Math.min(700,settings.speech.height+d));applySettings();}
 function bind(){$('startGameBtn').onclick=startGame;$('firstDiceBtn').onclick=firstDice;$('nextDiceBtn').onclick=nextTurn;$('enterShopBtn').onclick=enterShop;$('jumpBtn').onclick=jumpPlayer;$('replayBtn').onclick=()=>location.reload();$('endGameBtn').onclick=()=>{$('gameSetText').textContent='ゲームを終了しました。';$('replayBtn').style.display='none';$('endGameBtn').style.display='none';};$('pauseGameBtn').onclick=pauseGame;$('resumeGameBtn').onclick=resumeGame;$('restartGameBtn').onclick=restartGame;$('gotoTotalBtn').onclick=gotoTotal;$('devToggle').onclick=()=>$('devPanel').classList.toggle('hidden');$('saveLocalBtn').onclick=saveLocal;$('loadLocalBtn').onclick=loadLocal;$('downloadHtmlBtn').onclick=downloadHtml;$('saveInsideBtn').onclick=saveInside;$('insidePngSelect').onchange=()=>{insideSetting(true).png=$('insidePngSelect').value;applyPlayerStreet('inside');updateInfo();};$('speechFontDownBtn').onclick=()=>changeSpeechFont(-1);$('speechFontUpBtn').onclick=()=>changeSpeechFont(1);$('speechHeightDownBtn').onclick=()=>changeSpeechHeight(-10);$('speechHeightUpBtn').onclick=()=>changeSpeechHeight(10);document.querySelectorAll('#targetButtons button').forEach(b=>b.onclick=()=>{selected=b.dataset.target;preview();});document.querySelectorAll('#stepButtons button').forEach(b=>b.onclick=()=>{step=Number(b.dataset.step);updateInfo();});document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>nudge(b.dataset.move));document.querySelectorAll('[data-size]').forEach(b=>b.onclick=()=>resize(b.dataset.size));}
@@ -4217,6 +4245,7 @@ function v310SpeakPoliceMale(text){
   // V310: 警官コメントはMac/Safariの男性音声 Otoya を最優先。無い場合は male指定の従来読み上げ。
   return new Promise(resolve=>{
     if(!text || !('speechSynthesis' in window)) return resolve();
+    try{ primeMobileSpeech(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
     try{ prepareVoices(); }catch(e){}
     duckBgmsForSpeech();
@@ -4234,7 +4263,7 @@ function v310SpeakPoliceMale(text){
     const finish=()=>{ if(done)return; done=true; restoreBgmsAfterSpeech(); resolve(); };
     u.onend=finish;
     u.onerror=finish;
-    try{ speechSynthesis.speak(u); }catch(e){ finish(); }
+    waitAfterSpeechCancel().then(()=>{try{ speechSynthesis.speak(u); }catch(e){ finish(); }});
     setTimeout(finish, Math.max(3500, String(text).length*420));
   });
 }
@@ -4871,7 +4900,7 @@ try{
     normalizeForSave(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';
+    a.download='昭和商店街標準版V327-mobile-speech-fix.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V317 download patch failed',e);}
@@ -4976,7 +5005,7 @@ try{
     normalizeForSave(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';
+    a.download='昭和商店街標準版V327-mobile-speech-fix.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V318 download patch failed',e);}
@@ -5191,7 +5220,7 @@ try{
     normalizeForSave(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V326-smartphone-tablet-fit.html';
+    a.download='昭和商店街標準版V327-mobile-speech-fix.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
