@@ -1332,7 +1332,7 @@ button:hover{filter:brightness(1.12)}
 (() => {
 'use strict';
 const ASSET_PREFIX='';
-const PUBLIC_MODE=false;
+const PUBLIC_MODE=true;
 const W=1600,H=900,MAX=54,START_MONEY=30000,START_COMMENT='参拝もすんだから買い物にいきましょう';
 function fitGameToViewport(){
   const game=document.getElementById('game');
@@ -4329,26 +4329,6 @@ async function v308PlayPolicePart(police){
   syncHud();
   await rawWait(700);
 }
-async function v339PlayBellBeforeBicycle(){
-  const bell=$('bellSfx')||bellAudio;
-  if(!bell||gameEnded)return false;
-  try{
-    bell.pause();
-    bell.muted=false;
-    bell.defaultMuted=false;
-    bell.removeAttribute('muted');
-    bell.volume=1;
-    bell.currentTime=0;
-    if(bell.readyState===0)bell.load();
-    const p=bell.play();
-    if(p&&p.then)await p;
-    console.log('[V339 bell before bicycle started]', bell.src);
-    return true;
-  }catch(err){
-    console.warn('[V339 bell before bicycle failed]', err&&err.name?err.name:err, err&&err.message?err.message:'', bell.src);
-    return false;
-  }
-}
 async function startV308BicycleEvent(context){
   if(gameEnded||v308BicycleDone||v308BicycleActive)return false;
   v308BicycleDone=true;
@@ -4363,7 +4343,7 @@ async function startV308BicycleEvent(context){
     setShopSpeech('自転車が来ました！');
     const bike=v308MakeImg('v308BicyclePlugin','bicycle-1.png');
     const police=v308MakeImg('v308PolicemanPlugin','policeman.png');
-    Object.assign(bike.style,{left:'1250px',bottom:'40px',top:'auto',width:'528px',zIndex:'10040',display:'none'});
+    Object.assign(bike.style,{left:'1250px',bottom:'40px',top:'auto',width:'528px',zIndex:'10040',display:'block'});
     Object.assign(police.style,{left:'300px',bottom:'10px',top:'auto',width:'230px',zIndex:'10050',display:'none'});
     const loaded=await v308LoadBicycleImage(bike);
     if(!loaded || bike.naturalWidth===0){
@@ -4371,9 +4351,8 @@ async function startV308BicycleEvent(context){
       await rawWait(500);
       return false;
     }
-    // V339: bell2.mp3を先に鳴らしてから自転車を表示する。
-    await v339PlayBellBeforeBicycle();
-    bike.style.display='block';
+    // V309: 自転車が画面に出た時点でbell2.mp3を鳴らす。
+    v309PlayBicycleBell2();
     await rawWait(300);
     let frame=0;
     v308BicycleFrameTimer=setInterval(()=>{
@@ -5377,6 +5356,172 @@ function v333SetupPublicControls(){
 v333SetupAudioUnlock();
 v333SetupPublicControls();
 
+/* V340: busユニット式の新bicycle。既存bicycle関数は残すが、本番発生時は使わない。 */
+let v340BicycleDone=false;
+let v340BicycleActive=false;
+let v340BicycleTimer=null;
+let v340BicycleFrameTimer=null;
+let v340BicycleMoveTimer=null;
+function v340BicycleImg(id,file){
+  let el=$(id);
+  if(!el){
+    el=document.createElement('img');
+    el.id=id;
+    el.className='pluginSprite';
+    el.style.position='absolute';
+    el.style.pointerEvents='none';
+    $('game').appendChild(el);
+  }
+  el.src=ASSET_PREFIX+file;
+  return el;
+}
+function v340PlayBicycleBellOnce(){
+  const a=$('bellSfx')||bellAudio;
+  if(!a||gameEnded)return;
+  try{
+    a.currentTime=0;
+    v333PlayEventAudio(a,'bellSfx-v340');
+  }catch(e){
+    console.warn('[V340 bicycle bell error]',e);
+  }
+}
+function v340HideNormalControls(){
+  ['enterShopBtn','firstDiceBtn','nextDiceBtn','jumpBtn'].forEach(id=>{
+    const b=$(id);
+    if(b)b.style.display='none';
+  });
+}
+function v340RemoveBicycleBusStyle(){
+  if(v340BicycleTimer)clearTimeout(v340BicycleTimer);
+  if(v340BicycleFrameTimer)clearInterval(v340BicycleFrameTimer);
+  if(v340BicycleMoveTimer)clearTimeout(v340BicycleMoveTimer);
+  v340BicycleTimer=null;
+  v340BicycleFrameTimer=null;
+  v340BicycleMoveTimer=null;
+  ['v340BicyclePlugin','v340PolicemanPlugin'].forEach(id=>{
+    const el=$(id);
+    if(el){
+      el.style.transition='none';
+      el.style.display='none';
+    }
+  });
+  v340BicycleActive=false;
+}
+async function startBicycleBusStyle(context){
+  if(gameEnded||v340BicycleDone||v340BicycleActive)return false;
+  v340BicycleDone=true;
+  v340BicycleActive=true;
+  beginPriorityEvent('bicycle');
+  v340HideNormalControls();
+  const isArrivalContext=context==='arrival';
+  try{
+    if(!isArrivalContext)freezeStreetMotionForEvent();
+    stopWalkFrames();
+    stopWalk();
+    setShopSpeech('自転車が来ました！');
+    const bike=v340BicycleImg('v340BicyclePlugin','bicycle-1.png');
+    const police=v340BicycleImg('v340PolicemanPlugin','policeman.png');
+    let frame=0;
+    Object.assign(bike.style,{
+      left:'1700px',
+      bottom:'40px',
+      top:'auto',
+      width:'528px',
+      zIndex:'10040',
+      display:'block',
+      visibility:'visible',
+      opacity:'1',
+      transition:'none'
+    });
+    Object.assign(police.style,{
+      left:'300px',
+      bottom:'10px',
+      top:'auto',
+      width:'230px',
+      zIndex:'10050',
+      display:'none',
+      visibility:'visible',
+      opacity:'1',
+      transition:'none'
+    });
+    v340PlayBicycleBellOnce();
+    v340BicycleFrameTimer=setInterval(()=>{
+      if(!v340BicycleActive||paused)return;
+      frame=(frame+1)%3;
+      bike.src=ASSET_PREFIX+'bicycle-'+(frame+1)+'.png';
+    },180);
+    bike.offsetHeight;
+    bike.style.transition='left 4200ms linear';
+    bike.style.left='520px';
+    await rawWait(4200);
+    if(gameEnded||!v340BicycleActive)return false;
+    bike.style.transition='none';
+    bike.style.left='520px';
+    if(v340BicycleFrameTimer)clearInterval(v340BicycleFrameTimer);
+    v340BicycleFrameTimer=null;
+    police.style.display='block';
+    stopWalkFrames();
+    stopWalk();
+    await rawWait(500);
+    const policeText='こら！二人乗り禁止　罰金3000円';
+    setShopSpeech('「'+safe(policeText)+'」');
+    await speak('こら、ふたりのりきんし、ばっきんさんぜんえん','male');
+    money-=3000;
+    syncHud();
+    await rawWait(1000);
+    return true;
+  }catch(e){
+    console.warn('V340 bicycle bus style error',e);
+    return false;
+  }finally{
+    v340RemoveBicycleBusStyle();
+    endPriorityEvent('bicycle');
+    if(!gameEnded){
+      if(isArrivalContext){
+        if(typeof v308_base_arrive==='function')v308_base_arrive();
+        else arrive();
+      }else{
+        resumeStreetMotionForEvent();
+        playWalk();
+        startWalkFrames($('playerStreet'));
+      }
+    }
+  }
+}
+scheduleBicycleForRange=function(from,goal){
+  if(v340BicycleTimer)clearTimeout(v340BicycleTimer);
+  v340BicycleTimer=null;
+  if(v340BicycleDone||gameEnded)return false;
+  from=Number(from);goal=Number(goal);
+  if(!(from<25&&goal>=25))return false;
+  const delay=Math.max(600,(25-from)*5000-1000);
+  v340BicycleTimer=setTimeout(()=>{
+    v340BicycleTimer=null;
+    if(!gameEnded&&!v340BicycleDone)startBicycleBusStyle('crossing');
+  },delay);
+  return true;
+};
+const v340BaseStartGame=startGame;
+startGame=async function(){
+  v340BicycleDone=false;
+  v340RemoveBicycleBusStyle();
+  return await v340BaseStartGame.apply(this,arguments);
+};
+const v340BaseGotoTotal=gotoTotal;
+gotoTotal=function(){
+  v340BicycleDone=false;
+  v340RemoveBicycleBusStyle();
+  return v340BaseGotoTotal.apply(this,arguments);
+};
+arrive=function(){
+  if(Number(total)===25&&!v340BicycleDone&&!v340BicycleActive&&!gameEnded){
+    startBicycleBusStyle('arrival');
+    return;
+  }
+  if(typeof v308_base_arrive==='function')return v308_base_arrive.apply(this,arguments);
+  return undefined;
+};
+
 try{
   downloadHtml=function(){
     settings.selectedTarget=selected;settings.step=step;
@@ -5387,7 +5532,7 @@ try{
     v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V339-bell-before-bicycle.html';
+    a.download='昭和商店街標準プラグイン版V340-bicycle-bus-style-rebuild.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
