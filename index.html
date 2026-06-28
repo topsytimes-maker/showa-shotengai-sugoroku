@@ -1333,7 +1333,6 @@ button:hover{filter:brightness(1.12)}
 'use strict';
 const ASSET_PREFIX='';
 const PUBLIC_MODE=true;
-const INVESTIGATION_MODE=true;
 const W=1600,H=900,MAX=54,START_MONEY=30000,START_COMMENT='参拝もすんだから買い物にいきましょう';
 function fitGameToViewport(){
   const game=document.getElementById('game');
@@ -5271,10 +5270,8 @@ function v333UnlockEventAudio(){
   [busHornAudio,bellAudio].forEach(a=>{
     if(!a)return;
     try{
-      const oldMuted=a.muted, oldDefaultMuted=a.defaultMuted, oldVolume=a.volume;
+      const oldMuted=a.muted, oldVolume=a.volume;
       a.muted=true;
-      a.defaultMuted=true;
-      a.setAttribute('muted','');
       a.volume=0;
       a.currentTime=0;
       const p=a.play();
@@ -5283,12 +5280,10 @@ function v333UnlockEventAudio(){
           a.pause();
           a.currentTime=0;
           a.muted=oldMuted;
-          a.defaultMuted=oldDefaultMuted;
-          if(!oldMuted&&!oldDefaultMuted)a.removeAttribute('muted');
           a.volume=oldVolume;
         }catch(e){}
       };
-      if(p&&p.then)p.then(()=>setTimeout(restore,220)).catch(()=>setTimeout(restore,220));
+      if(p&&p.then)p.then(restore).catch(()=>{a.muted=oldMuted;a.volume=oldVolume;});
       else restore();
     }catch(e){}
   });
@@ -5309,7 +5304,6 @@ function v333SetupAudioUnlock(){
   ['startGameBtn','firstDiceBtn','nextDiceBtn','enterShopBtn','jumpBtn','publicEndGameBtn'].forEach(id=>{
     const el=$(id);
     if(el)el.addEventListener('pointerdown',v333UnlockEventAudio,{capture:true,passive:true});
-    if(el)el.addEventListener('click',v333UnlockEventAudio,{capture:true,passive:true});
   });
   document.addEventListener('touchstart',v333UnlockEventAudio,{once:true,capture:true,passive:true});
   document.addEventListener('mousedown',v333UnlockEventAudio,{once:true,capture:true});
@@ -5338,17 +5332,16 @@ function v333ConfirmEndGame(){
 }
 function v333ApplyPublicModeToRoot(root){
   const scope=root||document;
-  const hideDev=!!PUBLIC_MODE&&!INVESTIGATION_MODE;
   const ids=[
     'devToggle','devPanel',
     'v311TestPanel','v315RealRunPanel','v315RunBtn'
   ];
   ids.forEach(id=>{
     const el=scope.getElementById?scope.getElementById(id):(scope.querySelector?scope.querySelector('#'+id):null);
-    if(el)el.classList.toggle('v333-public-hidden',hideDev);
+    if(el)el.classList.toggle('v333-public-hidden',!!PUBLIC_MODE);
   });
   scope.querySelectorAll&&scope.querySelectorAll('[id^="v311"],[id^="v315"]').forEach(el=>{
-    el.classList.toggle('v333-public-hidden',hideDev);
+    el.classList.toggle('v333-public-hidden',!!PUBLIC_MODE);
   });
 }
 function v333SetupPublicControls(){
@@ -5363,85 +5356,90 @@ function v333SetupPublicControls(){
 v333SetupAudioUnlock();
 v333SetupPublicControls();
 
-/* V336: hit/sound investigation
-   V333を基準にし、位置・速度・移動本体は変更しない。
-   変更対象は child2接触判定、plane捕獲判定、bell/bushorn音声解除のみ。
-*/
-v259Child2IsHit=function(el){
-  const player=$('playerStreet');
-  if(!player||!el||el.style.display==='none'||jumping||Date.now()<=jumpGraceUntil)return false;
-  const pr=v287RectToGameRect(player.getBoundingClientRect());
-  const cr=v287RectToGameRect(el.getBoundingClientRect());
-  const playerBox=v287ShrinkRect(pr,0.42,0.42,0.34,0.22);
-  const childBox=v287ShrinkRect(cr,0.40,0.40,0.30,0.20);
-  return v287Overlap(playerBox,childBox);
-};
-
-function v336PlaneCatchable(){
-  const el=$('planePlugin'),player=$('playerStreet'),r=settings.plane||{};
-  if(!el||!player||el.style.display==='none'||gameEnded||paused)return false;
-  if(!v319PlaneActive||!v319PlaneJumped||!jumping||v319PlaneCaught)return false;
-  const pr=v287RectToGameRect(player.getBoundingClientRect());
-  const er=v287RectToGameRect(el.getBoundingClientRect());
-  const playerCenterX=pr.x+pr.width/2;
-  const planeCenterX=er.x+er.width/2;
-  const playerTop=pr.y;
-  const planeCenterY=er.y+er.height/2;
-  const catchX=Number(r.catchDistanceV336||430);
-  const catchY=Number(r.catchYDistanceV336||760);
-  return Math.abs(planeCenterX-playerCenterX)<=catchX && Math.abs(planeCenterY-playerTop)<=catchY;
+/* V337: bicycle-bell-test-v2.htmlで成功したbell2.mp3専用の解除・再生処理を移植。
+   自転車の移動本体、bus、読み上げ、画面サイズ処理には触れない。 */
+let v337BellAudioUnlocked=false;
+function v337BellAudio(){
+  return $('bellSfx')||bellAudio;
 }
-monitorPlane=function(){
-  const el=$('planePlugin'),player=$('playerStreet');
-  if(!el||!player||el.style.display==='none'||gameEnded){planeMonitorTimer=null;return;}
-  if(v336PlaneCatchable()){
-    v319PlaneCaught=true;
-    planeCaught=true;
-    stopWalk();
-    v319ClearPlaneTimers();
-    v319HidePlane();
-    endPriorityEvent('plane');
-  }
-  planeMonitorTimer=requestAnimationFrame(monitorPlane);
-};
-
-v309PlayBicycleBell2=function(){
-  const a=$('bellSfx')||bellAudio;
-  if(!a||gameEnded)return Promise.resolve();
+function v337Wait(ms){
+  return new Promise(resolve=>setTimeout(resolve,ms));
+}
+function v337FormatAudioError(err){
+  if(!err)return 'unknown';
+  return (err.name?err.name+': ':'')+(err.message||String(err));
+}
+async function v337UnlockBicycleBell(){
+  if(v337BellAudioUnlocked)return true;
+  const bell=v337BellAudio();
+  if(!bell)return false;
   try{
-    a.muted=false;
-    a.defaultMuted=false;
-    a.removeAttribute('muted');
-    a.volume=1;
-    a.currentTime=0;
-    if(a.readyState===0)a.load();
-    const p=a.play();
-    if(p&&p.catch)p.catch(err=>console.warn('[V336 bell2 blocked]',a.src,err));
-  }catch(e){
-    console.warn('[V336 bell2 error]',e);
+    const oldMuted=bell.muted;
+    const oldDefaultMuted=bell.defaultMuted;
+    const oldVolume=bell.volume;
+    bell.muted=true;
+    bell.defaultMuted=true;
+    bell.setAttribute('muted','');
+    bell.volume=0;
+    bell.currentTime=0;
+    bell.load();
+    const p=bell.play();
+    if(p&&p.then)await p;
+    await v337Wait(260);
+    bell.pause();
+    bell.currentTime=0;
+    bell.muted=oldMuted;
+    bell.defaultMuted=oldDefaultMuted;
+    if(!oldMuted&&!oldDefaultMuted)bell.removeAttribute('muted');
+    bell.volume=oldVolume;
+    v337BellAudioUnlocked=true;
+    console.log('[V337 bell2 unlock success]', bell.src);
+    return true;
+  }catch(err){
+    v337BellAudioUnlocked=false;
+    console.warn('[V337 bell2 unlock failed]', v337FormatAudioError(err));
+    return false;
   }
-  return Promise.resolve();
-};
-
-playBusHornOnce=function(){
-  const a=$('busHornSfx')||busHornAudio;
-  v333PlayEventAudio(a,'busHornSfx');
-};
-
-function __showaV336Check(){
-  const source=Array.from(document.scripts).map(s=>s.textContent||'').join('\n');
-  return {
-    parent:'V333',
-    investigationMode:INVESTIGATION_MODE,
-    child2BodyPreserved:source.includes("left:'1720px'")&&source.includes('endX=760')&&source.includes('duration=5200'),
-    child2HitTight:String(v259Child2IsHit).includes('0.42')&&String(v259Child2IsHit).includes('0.40'),
-    planeBodyPreserved:source.includes('speedMs||6800')&&source.includes("plane'+(frame+1)+'.png")&&source.includes('xEnd??1700'),
-    planeCatchAdjusted:String(monitorPlane).includes('v336PlaneCatchable'),
-    bicycleMovementUntouched:source.includes('async function startV308BicycleEvent')&&source.includes("width:'528px'")&&source.includes("bottom:'40px'"),
-    silentUnlock:String(v333UnlockEventAudio).includes('defaultMuted')&&String(v333UnlockEventAudio).includes("setAttribute('muted'")
-  };
 }
-window.__showaV336Check=__showaV336Check;
+function v337SetupBicycleBellUnlock(){
+  const handler=()=>{v337UnlockBicycleBell();};
+  ['startGameBtn','firstDiceBtn','nextDiceBtn','enterShopBtn','jumpBtn','publicEndGameBtn'].forEach(id=>{
+    const el=$(id);
+    if(el)el.addEventListener('pointerdown',handler,{capture:true,passive:true});
+  });
+  document.addEventListener('touchstart',handler,{capture:true,passive:true});
+  document.addEventListener('mousedown',handler,{capture:true});
+  document.addEventListener('keydown',handler,{capture:true});
+}
+v309PlayBicycleBell2=function(){
+  const bell=v337BellAudio();
+  if(!bell||gameEnded)return Promise.resolve(false);
+  try{
+    bell.pause();
+    bell.muted=false;
+    bell.defaultMuted=false;
+    bell.removeAttribute('muted');
+    bell.volume=1;
+    bell.currentTime=0;
+    if(bell.readyState===0)bell.load();
+    const p=bell.play();
+    if(p&&p.then){
+      return p.then(()=>{
+        console.log('[V337 bell2 play success]', bell.src);
+        return true;
+      }).catch(err=>{
+        console.warn('[V337 bell2 play failed]', v337FormatAudioError(err), bell.src);
+        return false;
+      });
+    }
+    console.log('[V337 bell2 play success]', bell.src);
+    return Promise.resolve(true);
+  }catch(err){
+    console.warn('[V337 bell2 play error]', v337FormatAudioError(err), bell.src);
+    return Promise.resolve(false);
+  }
+};
+v337SetupBicycleBellUnlock();
 
 try{
   downloadHtml=function(){
@@ -5453,7 +5451,7 @@ try{
     v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V336-hit-sound-investigation.html';
+    a.download='昭和商店街標準プラグイン版V337-bicycle-bell-v2-import.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
