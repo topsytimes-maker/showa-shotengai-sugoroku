@@ -5401,6 +5401,28 @@ async function v337UnlockBicycleBell(){
     return false;
   }
 }
+async function v338PrimeBellImmediatelyBeforePlay(bell){
+  if(!bell)return false;
+  try{
+    bell.pause();
+    bell.muted=true;
+    bell.defaultMuted=true;
+    bell.setAttribute('muted','');
+    bell.volume=0;
+    bell.currentTime=0;
+    if(bell.readyState===0)bell.load();
+    const p=bell.play();
+    if(p&&p.then)await p;
+    await v337Wait(120);
+    bell.pause();
+    bell.currentTime=0;
+    return true;
+  }catch(err){
+    console.warn('[V338 bell2 before-play unlock failed]', v337FormatAudioError(err), bell.src);
+    try{bell.pause();bell.currentTime=0;}catch(e){}
+    return false;
+  }
+}
 function v337SetupBicycleBellUnlock(){
   const handler=()=>{v337UnlockBicycleBell();};
   ['startGameBtn','firstDiceBtn','nextDiceBtn','enterShopBtn','jumpBtn','publicEndGameBtn'].forEach(id=>{
@@ -5411,10 +5433,11 @@ function v337SetupBicycleBellUnlock(){
   document.addEventListener('mousedown',handler,{capture:true});
   document.addEventListener('keydown',handler,{capture:true});
 }
-v309PlayBicycleBell2=function(){
+v309PlayBicycleBell2=async function(){
   const bell=v337BellAudio();
   if(!bell||gameEnded)return Promise.resolve(false);
   try{
+    await v338PrimeBellImmediatelyBeforePlay(bell);
     bell.pause();
     bell.muted=false;
     bell.defaultMuted=false;
@@ -5425,17 +5448,17 @@ v309PlayBicycleBell2=function(){
     const p=bell.play();
     if(p&&p.then){
       return p.then(()=>{
-        console.log('[V337 bell2 play success]', bell.src);
+        console.log('[V338 bell2 play success]', bell.src);
         return true;
       }).catch(err=>{
-        console.warn('[V337 bell2 play failed]', v337FormatAudioError(err), bell.src);
+        console.warn('[V338 bell2 play failed]', v337FormatAudioError(err), bell.src);
         return false;
       });
     }
-    console.log('[V337 bell2 play success]', bell.src);
+    console.log('[V338 bell2 play success]', bell.src);
     return Promise.resolve(true);
   }catch(err){
-    console.warn('[V337 bell2 play error]', v337FormatAudioError(err), bell.src);
+    console.warn('[V338 bell2 play error]', v337FormatAudioError(err), bell.src);
     return Promise.resolve(false);
   }
 };
@@ -5451,7 +5474,7 @@ try{
     v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V337-bicycle-bell-v2-import.html';
+    a.download='昭和商店街標準プラグイン版V338-bell-before-play-test.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
