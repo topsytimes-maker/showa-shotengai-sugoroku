@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>bicycle bell2.mp3 test</title>
+<title>bicycle bell2.mp3 test v2</title>
 <style>
   html,body{
     margin:0;
@@ -12,92 +12,96 @@
     overflow:hidden;
     background:#1d2327;
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
+    touch-action:manipulation;
   }
   #wrap{
-    width:100vw;
-    height:100vh;
-    display:grid;
-    place-items:center;
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    background:#1d2327;
   }
   #game{
-    position:relative;
-    width:1600px;
-    height:900px;
+    position:absolute;
+    left:0;
+    top:0;
+    width:1200px;
+    height:675px;
     overflow:hidden;
-    background:linear-gradient(#e8f7ff 0 58%, #d7d0ca 58% 100%);
-    transform-origin:center center;
+    background:linear-gradient(#e8f7ff 0 57%, #d7d0ca 57% 100%);
+    transform-origin:0 0;
   }
   #road{
     position:absolute;
     left:0;
     right:0;
     bottom:0;
-    height:260px;
+    height:190px;
     background:#b9b0aa;
-    border-top:8px solid #938b86;
+    border-top:6px solid #938b86;
   }
   #controls{
     position:absolute;
-    left:32px;
-    top:28px;
+    left:22px;
+    top:18px;
     z-index:50;
     display:flex;
-    gap:16px;
+    gap:10px;
     align-items:center;
+    flex-wrap:wrap;
+    max-width:620px;
   }
   button{
-    font-size:30px;
+    font-size:22px;
     font-weight:800;
     color:white;
     background:#c82020;
-    border:4px solid #7b1111;
-    border-radius:10px;
-    padding:18px 28px;
-    box-shadow:0 6px 0 rgba(0,0,0,.22);
+    border:3px solid #7b1111;
+    border-radius:8px;
+    padding:12px 16px;
+    box-shadow:0 4px 0 rgba(0,0,0,.22);
   }
-  button:disabled{
-    opacity:.48;
-  }
+  button:disabled{opacity:.48;}
+  #resetBtn{background:#2567b8;border-color:#12376a;}
   #status{
     position:absolute;
-    left:32px;
-    top:130px;
+    left:22px;
+    top:88px;
     z-index:45;
-    min-width:520px;
-    padding:14px 18px;
+    width:430px;
+    padding:10px 12px;
     color:#1f1b00;
     background:#ffe35d;
-    border:4px solid #7e6a00;
+    border:3px solid #7e6a00;
     border-radius:8px;
-    font-size:26px;
+    font-size:20px;
     font-weight:800;
   }
   #speech{
     position:absolute;
     left:50%;
-    bottom:48px;
+    bottom:30px;
     transform:translateX(-50%);
     z-index:45;
-    width:980px;
-    min-height:105px;
+    width:720px;
+    min-height:78px;
     display:flex;
     align-items:center;
     justify-content:center;
     text-align:center;
     color:#111;
     background:#fff06a;
-    border:6px solid #a80000;
-    border-radius:12px;
-    font-size:42px;
+    border:5px solid #a80000;
+    border-radius:10px;
+    font-size:30px;
     font-weight:900;
     line-height:1.25;
   }
   #bicycle{
     position:absolute;
     z-index:20;
-    left:1680px;
-    bottom:95px;
-    width:420px;
+    left:1260px;
+    bottom:72px;
+    width:300px;
     height:auto;
     object-fit:contain;
     display:none;
@@ -106,9 +110,9 @@
   #police{
     position:absolute;
     z-index:25;
-    right:22px;
-    bottom:70px;
-    width:260px;
+    right:18px;
+    bottom:50px;
+    width:190px;
     height:auto;
     object-fit:contain;
     display:block;
@@ -116,19 +120,26 @@
   }
   #log{
     position:absolute;
-    right:28px;
-    top:28px;
+    right:18px;
+    top:18px;
     z-index:60;
-    width:560px;
-    max-height:360px;
+    width:390px;
+    max-height:250px;
     overflow:auto;
-    padding:14px 16px;
-    background:rgba(0,0,0,.78);
+    padding:10px 12px;
+    background:rgba(0,0,0,.80);
     color:#d8ffdf;
     border:3px solid #78d38a;
     border-radius:8px;
-    font:20px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;
+    font:15px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;
     white-space:pre-wrap;
+  }
+  @media (max-aspect-ratio: 13/9){
+    #controls{max-width:520px;}
+    button{font-size:20px;padding:10px 12px;}
+    #status{top:122px;width:360px;font-size:18px;}
+    #log{width:340px;max-height:210px;font-size:14px;}
+    #speech{width:650px;font-size:28px;}
   }
 </style>
 </head>
@@ -139,11 +150,12 @@
     <div id="controls">
       <button id="initBtn" type="button">音声初期化</button>
       <button id="startBtn" type="button">自転車イベント開始</button>
+      <button id="resetBtn" type="button">もう一度テスト</button>
     </div>
     <div id="status">音声初期化を押してください</div>
-    <img id="police" src="police.png" alt="警官">
+    <img id="police" src="policeman.png" alt="警官">
     <img id="bicycle" src="bicycle.png" alt="自転車">
-    <div id="speech">bell2.mp3 検証</div>
+    <div id="speech">bell2.mp3 検証 v2</div>
     <div id="log"></div>
   </main>
 </div>
@@ -151,10 +163,11 @@
 
 <script>
 'use strict';
-const W=1600,H=900;
+const W=1200,H=675;
 const game=document.getElementById('game');
 const initBtn=document.getElementById('initBtn');
 const startBtn=document.getElementById('startBtn');
+const resetBtn=document.getElementById('resetBtn');
 const statusBox=document.getElementById('status');
 const speechBox=document.getElementById('speech');
 const logBox=document.getElementById('log');
@@ -162,24 +175,57 @@ const bicycle=document.getElementById('bicycle');
 const police=document.getElementById('police');
 const bell=document.getElementById('bell');
 let audioUnlocked=false;
-let running=false;
+let eventRunning=false;
 
+function viewportSize(){
+  const vv=window.visualViewport;
+  return {
+    w: Math.max(1, vv ? vv.width : window.innerWidth),
+    h: Math.max(1, vv ? vv.height : window.innerHeight)
+  };
+}
 function fit(){
-  const s=Math.min(innerWidth/W, innerHeight/H);
-  game.style.transform='scale('+s+')';
+  const v=viewportSize();
+  const safe=10;
+  const scale=Math.min((v.w-safe*2)/W, (v.h-safe*2)/H);
+  const s=Math.max(.1, scale);
+  const x=Math.max(0, (v.w-W*s)/2);
+  const y=Math.max(0, (v.h-H*s)/2);
+  game.style.transform='translate('+x+'px,'+y+'px) scale('+s+')';
 }
 addEventListener('resize',fit,{passive:true});
-addEventListener('orientationchange',()=>setTimeout(fit,120),{passive:true});
+addEventListener('orientationchange',()=>setTimeout(fit,180),{passive:true});
+if(window.visualViewport)visualViewport.addEventListener('resize',fit,{passive:true});
 fit();
+setTimeout(fit,250);
 
 function log(msg){
   const time=new Date().toLocaleTimeString();
   logBox.textContent+='['+time+'] '+msg+'\n';
   logBox.scrollTop=logBox.scrollHeight;
 }
-
+function clearLog(){logBox.textContent='';}
 function setStatus(text){statusBox.textContent=text;}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+function formatError(err){
+  if(!err)return 'unknown error';
+  const name=err.name?err.name+': ':'';
+  return name+(err.message||String(err));
+}
+
+function resetVisuals(keepLog){
+  eventRunning=false;
+  startBtn.disabled=false;
+  bicycle.style.transition='none';
+  bicycle.style.display='none';
+  bicycle.style.left='1260px';
+  bicycle.style.bottom='72px';
+  speechBox.textContent='bell2.mp3 検証 v2';
+  setStatus(audioUnlocked?'音声初期化OK':'音声初期化を押してください');
+  try{bell.pause();bell.currentTime=0;}catch(e){}
+  if(!keepLog)clearLog();
+  log('reset ready');
+}
 
 async function unlockBell(){
   log('音声初期化開始');
@@ -195,7 +241,7 @@ async function unlockBell(){
     bell.load();
     const p=bell.play();
     if(p&&p.then)await p;
-    await wait(240);
+    await wait(260);
     bell.pause();
     bell.currentTime=0;
     bell.muted=oldMuted;
@@ -233,19 +279,12 @@ async function playBell(label){
   }
 }
 
-function formatError(err){
-  if(!err)return 'unknown error';
-  const name=err.name?err.name+': ':'';
-  return name+(err.message||String(err));
-}
-
 function pickKyoko(){
   const voices=speechSynthesis.getVoices ? speechSynthesis.getVoices() : [];
   return voices.find(v=>/Kyoko/i.test(v.name)) ||
          voices.find(v=>/ja-JP|Japanese|日本語/i.test((v.lang||'')+' '+(v.name||''))) ||
          null;
 }
-
 function speakPolice(text){
   return new Promise(resolve=>{
     if(!('speechSynthesis' in window)){log('speechSynthesis unavailable');resolve();return;}
@@ -268,55 +307,63 @@ if('speechSynthesis' in window){
 }
 
 async function startEvent(){
-  if(running)return;
-  running=true;
+  if(eventRunning){log('event already running');return;}
+  eventRunning=true;
   startBtn.disabled=true;
-  speechBox.textContent='自転車が来ます';
-  setStatus(audioUnlocked?'イベント開始':'未初期化でもイベント開始');
-  log('bicycle event start');
+  try{
+    speechBox.textContent='自転車が来ます';
+    setStatus(audioUnlocked?'イベント開始':'未初期化でもイベント開始');
+    log('bicycle event start');
 
-  bicycle.style.transition='none';
-  bicycle.style.display='block';
-  bicycle.style.left='1680px';
-  bicycle.style.bottom='95px';
-  bicycle.offsetHeight;
+    bicycle.style.transition='none';
+    bicycle.style.display='block';
+    bicycle.style.left='1260px';
+    bicycle.style.bottom='72px';
+    bicycle.offsetHeight;
 
-  await playBell('bell at bicycle appear');
+    await playBell('bell at bicycle appear');
 
-  bicycle.style.transition='left 2600ms linear';
-  bicycle.style.left='1120px';
-  await wait(2700);
+    bicycle.style.transition='left 2300ms linear';
+    bicycle.style.left='825px';
+    await wait(2400);
 
-  speechBox.textContent='こら！二人乗り禁止';
-  log('bicycle stop before police');
-  await speakPolice('こら、ふたりのりきんし');
-  await wait(300);
+    speechBox.textContent='こら！二人乗り禁止';
+    log('bicycle stop before police');
+    await speakPolice('こら、ふたりのりきんし');
+    await wait(300);
 
-  speechBox.textContent='自転車が再発進します';
-  bicycle.style.transition='left 3000ms linear';
-  bicycle.style.left='-460px';
-  await wait(3100);
+    speechBox.textContent='自転車が再発進します';
+    bicycle.style.transition='left 2600ms linear';
+    bicycle.style.left='-330px';
+    await wait(2700);
 
-  bicycle.style.display='none';
-  bicycle.style.transition='none';
-  speechBox.textContent='検証終了';
-  setStatus('イベント終了');
-  log('bicycle event end');
-  startBtn.disabled=false;
-  running=false;
+    speechBox.textContent='検証終了';
+    setStatus('イベント終了。もう一度テストできます');
+    log('bicycle event end');
+  }catch(err){
+    setStatus('イベント中にエラー');
+    log('event error: '+formatError(err));
+  }finally{
+    bicycle.style.display='none';
+    bicycle.style.transition='none';
+    bicycle.style.left='1260px';
+    startBtn.disabled=false;
+    eventRunning=false;
+  }
 }
 
 initBtn.addEventListener('click',unlockBell);
 initBtn.addEventListener('touchend',()=>{}, {passive:true});
 startBtn.addEventListener('click',startEvent);
+resetBtn.addEventListener('click',()=>resetVisuals(false));
 
 bicycle.onerror=()=>log('bicycle.png load failed');
 bicycle.onload=()=>log('bicycle.png loaded');
-police.onerror=()=>log('police.png load failed');
-police.onload=()=>log('police.png loaded');
+police.onerror=()=>log('policeman.png load failed');
+police.onload=()=>log('policeman.png loaded');
 bell.onerror=()=>log('bell2.mp3 load failed');
 bell.oncanplaythrough=()=>log('bell2.mp3 canplaythrough');
-log('test page ready');
+log('test page v2 ready');
 </script>
 </body>
 </html>
