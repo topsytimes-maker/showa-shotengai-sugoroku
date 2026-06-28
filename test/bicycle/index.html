@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>bicycle bell2.mp3 test</title>
+<style>
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#1d2327;
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
+  }
+  #wrap{
+    width:100vw;
+    height:100vh;
+    display:grid;
+    place-items:center;
+  }
+  #game{
+    position:relative;
+    width:1600px;
+    height:900px;
+    overflow:hidden;
+    background:linear-gradient(#e8f7ff 0 58%, #d7d0ca 58% 100%);
+    transform-origin:center center;
+  }
+  #road{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:260px;
+    background:#b9b0aa;
+    border-top:8px solid #938b86;
+  }
+  #controls{
+    position:absolute;
+    left:32px;
+    top:28px;
+    z-index:50;
+    display:flex;
+    gap:16px;
+    align-items:center;
+  }
+  button{
+    font-size:30px;
+    font-weight:800;
+    color:white;
+    background:#c82020;
+    border:4px solid #7b1111;
+    border-radius:10px;
+    padding:18px 28px;
+    box-shadow:0 6px 0 rgba(0,0,0,.22);
+  }
+  button:disabled{
+    opacity:.48;
+  }
+  #status{
+    position:absolute;
+    left:32px;
+    top:130px;
+    z-index:45;
+    min-width:520px;
+    padding:14px 18px;
+    color:#1f1b00;
+    background:#ffe35d;
+    border:4px solid #7e6a00;
+    border-radius:8px;
+    font-size:26px;
+    font-weight:800;
+  }
+  #speech{
+    position:absolute;
+    left:50%;
+    bottom:48px;
+    transform:translateX(-50%);
+    z-index:45;
+    width:980px;
+    min-height:105px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    color:#111;
+    background:#fff06a;
+    border:6px solid #a80000;
+    border-radius:12px;
+    font-size:42px;
+    font-weight:900;
+    line-height:1.25;
+  }
+  #bicycle{
+    position:absolute;
+    z-index:20;
+    left:1680px;
+    bottom:95px;
+    width:420px;
+    height:auto;
+    object-fit:contain;
+    display:none;
+    pointer-events:none;
+  }
+  #police{
+    position:absolute;
+    z-index:25;
+    right:22px;
+    bottom:70px;
+    width:260px;
+    height:auto;
+    object-fit:contain;
+    display:block;
+    pointer-events:none;
+  }
+  #log{
+    position:absolute;
+    right:28px;
+    top:28px;
+    z-index:60;
+    width:560px;
+    max-height:360px;
+    overflow:auto;
+    padding:14px 16px;
+    background:rgba(0,0,0,.78);
+    color:#d8ffdf;
+    border:3px solid #78d38a;
+    border-radius:8px;
+    font:20px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;
+    white-space:pre-wrap;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <main id="game">
+    <div id="road"></div>
+    <div id="controls">
+      <button id="initBtn" type="button">音声初期化</button>
+      <button id="startBtn" type="button">自転車イベント開始</button>
+    </div>
+    <div id="status">音声初期化を押してください</div>
+    <img id="police" src="police.png" alt="警官">
+    <img id="bicycle" src="bicycle.png" alt="自転車">
+    <div id="speech">bell2.mp3 検証</div>
+    <div id="log"></div>
+  </main>
+</div>
+<audio id="bell" src="bell2.mp3" preload="auto" playsinline></audio>
+
+<script>
+'use strict';
+const W=1600,H=900;
+const game=document.getElementById('game');
+const initBtn=document.getElementById('initBtn');
+const startBtn=document.getElementById('startBtn');
+const statusBox=document.getElementById('status');
+const speechBox=document.getElementById('speech');
+const logBox=document.getElementById('log');
+const bicycle=document.getElementById('bicycle');
+const police=document.getElementById('police');
+const bell=document.getElementById('bell');
+let audioUnlocked=false;
+let running=false;
+
+function fit(){
+  const s=Math.min(innerWidth/W, innerHeight/H);
+  game.style.transform='scale('+s+')';
+}
+addEventListener('resize',fit,{passive:true});
+addEventListener('orientationchange',()=>setTimeout(fit,120),{passive:true});
+fit();
+
+function log(msg){
+  const time=new Date().toLocaleTimeString();
+  logBox.textContent+='['+time+'] '+msg+'\n';
+  logBox.scrollTop=logBox.scrollHeight;
+}
+
+function setStatus(text){statusBox.textContent=text;}
+function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+
+async function unlockBell(){
+  log('音声初期化開始');
+  try{
+    const oldMuted=bell.muted;
+    const oldDefaultMuted=bell.defaultMuted;
+    const oldVolume=bell.volume;
+    bell.muted=true;
+    bell.defaultMuted=true;
+    bell.setAttribute('muted','');
+    bell.volume=0;
+    bell.currentTime=0;
+    bell.load();
+    const p=bell.play();
+    if(p&&p.then)await p;
+    await wait(240);
+    bell.pause();
+    bell.currentTime=0;
+    bell.muted=oldMuted;
+    bell.defaultMuted=oldDefaultMuted;
+    if(!oldMuted&&!oldDefaultMuted)bell.removeAttribute('muted');
+    bell.volume=oldVolume;
+    audioUnlocked=true;
+    setStatus('音声初期化OK');
+    log('bell2.mp3 unlock success');
+  }catch(err){
+    audioUnlocked=false;
+    setStatus('音声初期化失敗');
+    log('bell2.mp3 unlock failed: '+formatError(err));
+  }
+}
+
+async function playBell(label){
+  try{
+    bell.pause();
+    bell.muted=false;
+    bell.defaultMuted=false;
+    bell.removeAttribute('muted');
+    bell.volume=1;
+    bell.currentTime=0;
+    if(bell.readyState===0)bell.load();
+    const p=bell.play();
+    if(p&&p.then)await p;
+    log(label+' play success');
+    setStatus('bell2.mp3 再生OK');
+    return true;
+  }catch(err){
+    log(label+' play failed: '+formatError(err));
+    setStatus('bell2.mp3 再生失敗');
+    return false;
+  }
+}
+
+function formatError(err){
+  if(!err)return 'unknown error';
+  const name=err.name?err.name+': ':'';
+  return name+(err.message||String(err));
+}
+
+function pickKyoko(){
+  const voices=speechSynthesis.getVoices ? speechSynthesis.getVoices() : [];
+  return voices.find(v=>/Kyoko/i.test(v.name)) ||
+         voices.find(v=>/ja-JP|Japanese|日本語/i.test((v.lang||'')+' '+(v.name||''))) ||
+         null;
+}
+
+function speakPolice(text){
+  return new Promise(resolve=>{
+    if(!('speechSynthesis' in window)){log('speechSynthesis unavailable');resolve();return;}
+    try{speechSynthesis.cancel();}catch(e){}
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang='ja-JP';
+    u.rate=.9;
+    u.pitch=.9;
+    u.volume=1;
+    const v=pickKyoko();
+    if(v){u.voice=v;log('voice: '+v.name);}
+    else log('voice: Kyoko not found, fallback');
+    u.onend=resolve;
+    u.onerror=e=>{log('speech error: '+(e.error||'unknown'));resolve();};
+    speechSynthesis.speak(u);
+  });
+}
+if('speechSynthesis' in window){
+  speechSynthesis.onvoiceschanged=()=>log('voices loaded: '+speechSynthesis.getVoices().length);
+}
+
+async function startEvent(){
+  if(running)return;
+  running=true;
+  startBtn.disabled=true;
+  speechBox.textContent='自転車が来ます';
+  setStatus(audioUnlocked?'イベント開始':'未初期化でもイベント開始');
+  log('bicycle event start');
+
+  bicycle.style.transition='none';
+  bicycle.style.display='block';
+  bicycle.style.left='1680px';
+  bicycle.style.bottom='95px';
+  bicycle.offsetHeight;
+
+  await playBell('bell at bicycle appear');
+
+  bicycle.style.transition='left 2600ms linear';
+  bicycle.style.left='1120px';
+  await wait(2700);
+
+  speechBox.textContent='こら！二人乗り禁止';
+  log('bicycle stop before police');
+  await speakPolice('こら、ふたりのりきんし');
+  await wait(300);
+
+  speechBox.textContent='自転車が再発進します';
+  bicycle.style.transition='left 3000ms linear';
+  bicycle.style.left='-460px';
+  await wait(3100);
+
+  bicycle.style.display='none';
+  bicycle.style.transition='none';
+  speechBox.textContent='検証終了';
+  setStatus('イベント終了');
+  log('bicycle event end');
+  startBtn.disabled=false;
+  running=false;
+}
+
+initBtn.addEventListener('click',unlockBell);
+initBtn.addEventListener('touchend',()=>{}, {passive:true});
+startBtn.addEventListener('click',startEvent);
+
+bicycle.onerror=()=>log('bicycle.png load failed');
+bicycle.onload=()=>log('bicycle.png loaded');
+police.onerror=()=>log('police.png load failed');
+police.onload=()=>log('police.png loaded');
+bell.onerror=()=>log('bell2.mp3 load failed');
+bell.oncanplaythrough=()=>log('bell2.mp3 canplaythrough');
+log('test page ready');
+</script>
+</body>
+</html>
