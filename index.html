@@ -5356,72 +5356,265 @@ function v333SetupPublicControls(){
 v333SetupAudioUnlock();
 v333SetupPublicControls();
 
-/* V340: busユニット式の新bicycle。既存bicycle関数は残すが、本番発生時は使わない。 */
-let v340BicycleDone=false;
-let v340BicycleActive=false;
-let v340BicycleTimer=null;
-let v340BicycleFrameTimer=null;
-let v340BicycleMoveTimer=null;
-function v340BicycleImg(id,file){
-  let el=$(id);
+/* V337: bicycle-bell-test-v2.htmlで成功したbell2.mp3専用の解除・再生処理を移植。
+   自転車の移動本体、bus、読み上げ、画面サイズ処理には触れない。 */
+let v337BellAudioUnlocked=false;
+function v337BellAudio(){
+  return $('bellSfx')||bellAudio;
+}
+function v337Wait(ms){
+  return new Promise(resolve=>setTimeout(resolve,ms));
+}
+function v337FormatAudioError(err){
+  if(!err)return 'unknown';
+  return (err.name?err.name+': ':'')+(err.message||String(err));
+}
+async function v337UnlockBicycleBell(){
+  if(v337BellAudioUnlocked)return true;
+  const bell=v337BellAudio();
+  if(!bell)return false;
+  try{
+    const oldMuted=bell.muted;
+    const oldDefaultMuted=bell.defaultMuted;
+    const oldVolume=bell.volume;
+    bell.muted=true;
+    bell.defaultMuted=true;
+    bell.setAttribute('muted','');
+    bell.volume=0;
+    bell.currentTime=0;
+    bell.load();
+    const p=bell.play();
+    if(p&&p.then)await p;
+    await v337Wait(260);
+    bell.pause();
+    bell.currentTime=0;
+    bell.muted=oldMuted;
+    bell.defaultMuted=oldDefaultMuted;
+    if(!oldMuted&&!oldDefaultMuted)bell.removeAttribute('muted');
+    bell.volume=oldVolume;
+    v337BellAudioUnlocked=true;
+    console.log('[V337 bell2 unlock success]', bell.src);
+    return true;
+  }catch(err){
+    v337BellAudioUnlocked=false;
+    console.warn('[V337 bell2 unlock failed]', v337FormatAudioError(err));
+    return false;
+  }
+}
+function v337SetupBicycleBellUnlock(){
+  const handler=()=>{v337UnlockBicycleBell();};
+  ['startGameBtn','firstDiceBtn','nextDiceBtn','enterShopBtn','jumpBtn','publicEndGameBtn'].forEach(id=>{
+    const el=$(id);
+    if(el)el.addEventListener('pointerdown',handler,{capture:true,passive:true});
+  });
+  document.addEventListener('touchstart',handler,{capture:true,passive:true});
+  document.addEventListener('mousedown',handler,{capture:true});
+  document.addEventListener('keydown',handler,{capture:true});
+}
+v309PlayBicycleBell2=function(){
+  const bell=v337BellAudio();
+  if(!bell||gameEnded)return Promise.resolve(false);
+  try{
+    bell.pause();
+    bell.muted=false;
+    bell.defaultMuted=false;
+    bell.removeAttribute('muted');
+    bell.volume=1;
+    bell.currentTime=0;
+    if(bell.readyState===0)bell.load();
+    const p=bell.play();
+    if(p&&p.then){
+      return p.then(()=>{
+        console.log('[V337 bell2 play success]', bell.src);
+        return true;
+      }).catch(err=>{
+        console.warn('[V337 bell2 play failed]', v337FormatAudioError(err), bell.src);
+        return false;
+      });
+    }
+    console.log('[V337 bell2 play success]', bell.src);
+    return Promise.resolve(true);
+  }catch(err){
+    console.warn('[V337 bell2 play error]', v337FormatAudioError(err), bell.src);
+    return Promise.resolve(false);
+  }
+};
+v337SetupBicycleBellUnlock();
+
+/* V341: bicycle complete rebuild
+   V337を親に、旧bicycle本体を使わず、bus方式を見本にした新規ユニットだけを本番接続する。
+   旧bicycle DOM/関数/タイマー/音声処理はイベント本番では使用しない。
+*/
+let v341CycleStarted=false;
+let v341CycleActive=false;
+let v341CycleStartTimer=null;
+let v341CycleMoveTimer=null;
+let v341CycleFrameTimer=null;
+let v341CycleResumeTimer=null;
+let v341CycleAudioReady=false;
+
+function v341CycleAudio(){
+  let audio=document.getElementById('bellV341Sfx');
+  if(!audio){
+    audio=document.createElement('audio');
+    audio.id='bellV341Sfx';
+    audio.src=ASSET_PREFIX+'bell2.mp3';
+    audio.preload='auto';
+    audio.setAttribute('playsinline','');
+    document.body.appendChild(audio);
+  }
+  return audio;
+}
+
+function v341CycleImage(id,file){
+  let el=document.getElementById(id);
   if(!el){
     el=document.createElement('img');
     el.id=id;
     el.className='pluginSprite';
     el.style.position='absolute';
+    el.style.objectFit='contain';
     el.style.pointerEvents='none';
-    $('game').appendChild(el);
+    document.getElementById('game').appendChild(el);
   }
   el.src=ASSET_PREFIX+file;
   return el;
 }
-function v340PlayBicycleBellOnce(){
-  const a=$('bellSfx')||bellAudio;
-  if(!a||gameEnded)return;
+
+function v341ClearCycleTimers(){
+  if(v341CycleStartTimer)clearTimeout(v341CycleStartTimer);
+  if(v341CycleMoveTimer)clearTimeout(v341CycleMoveTimer);
+  if(v341CycleFrameTimer)clearInterval(v341CycleFrameTimer);
+  if(v341CycleResumeTimer)clearTimeout(v341CycleResumeTimer);
+  v341CycleStartTimer=null;
+  v341CycleMoveTimer=null;
+  v341CycleFrameTimer=null;
+  v341CycleResumeTimer=null;
+}
+
+function stopBicycleV341(hide=true){
+  v341ClearCycleTimers();
+  ['cycleV341Sprite','policeV341Sprite'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.style.transition='none';
+      if(hide)el.style.display='none';
+    }
+  });
+  v341CycleActive=false;
+  if(hide)endPriorityEvent('bicycle');
+}
+
+async function unlockBellV341(){
+  if(v341CycleAudioReady)return true;
+  const audio=v341CycleAudio();
   try{
-    a.currentTime=0;
-    v333PlayEventAudio(a,'bellSfx-v340');
-  }catch(e){
-    console.warn('[V340 bicycle bell error]',e);
+    const oldMuted=audio.muted;
+    const oldVolume=audio.volume;
+    audio.muted=true;
+    audio.volume=0;
+    audio.currentTime=0;
+    if(audio.readyState===0)audio.load();
+    const p=audio.play();
+    if(p&&p.then)await p;
+    await rawWait(180);
+    audio.pause();
+    audio.currentTime=0;
+    audio.muted=oldMuted;
+    audio.volume=oldVolume;
+    v341CycleAudioReady=true;
+    console.log('[V341 bell unlock success]',audio.src);
+    return true;
+  }catch(err){
+    v341CycleAudioReady=false;
+    console.warn('[V341 bell unlock failed]',err);
+    return false;
   }
 }
-function v340HideNormalControls(){
+
+function setupBellUnlockV341(){
+  const handler=()=>{unlockBellV341();};
+  ['startGameBtn','firstDiceBtn','nextDiceBtn','enterShopBtn','jumpBtn','publicEndGameBtn','gotoTotalBtn'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('pointerdown',handler,{capture:true,passive:true});
+  });
+  document.addEventListener('touchstart',handler,{capture:true,passive:true});
+  document.addEventListener('mousedown',handler,{capture:true});
+  document.addEventListener('keydown',handler,{capture:true});
+}
+
+function playBellV341(){
+  const audio=v341CycleAudio();
+  if(!audio||gameEnded)return Promise.resolve(false);
+  try{
+    audio.pause();
+    audio.muted=false;
+    audio.volume=1;
+    audio.currentTime=0;
+    if(audio.readyState===0)audio.load();
+    const p=audio.play();
+    if(p&&p.then){
+      return p.then(()=>{
+        console.log('[V341 bell play success]',audio.src);
+        return true;
+      }).catch(err=>{
+        console.warn('[V341 bell play failed]',err,audio.src);
+        return false;
+      });
+    }
+    console.log('[V341 bell play success]',audio.src);
+    return Promise.resolve(true);
+  }catch(err){
+    console.warn('[V341 bell play error]',err);
+    return Promise.resolve(false);
+  }
+}
+
+function hideCycleControlsV341(){
   ['enterShopBtn','firstDiceBtn','nextDiceBtn','jumpBtn'].forEach(id=>{
-    const b=$(id);
+    const b=document.getElementById(id);
     if(b)b.style.display='none';
   });
 }
-function v340RemoveBicycleBusStyle(){
-  if(v340BicycleTimer)clearTimeout(v340BicycleTimer);
-  if(v340BicycleFrameTimer)clearInterval(v340BicycleFrameTimer);
-  if(v340BicycleMoveTimer)clearTimeout(v340BicycleMoveTimer);
-  v340BicycleTimer=null;
-  v340BicycleFrameTimer=null;
-  v340BicycleMoveTimer=null;
-  ['v340BicyclePlugin','v340PolicemanPlugin'].forEach(id=>{
-    const el=$(id);
-    if(el){
-      el.style.transition='none';
-      el.style.display='none';
-    }
-  });
-  v340BicycleActive=false;
+
+function restoreCycleControlsV341(){
+  const next=document.getElementById('nextDiceBtn');
+  const jump=document.getElementById('jumpBtn');
+  if(jump)jump.style.display='block';
+  if(next){
+    next.onclick=nextTurn;
+    next.style.display='inline-block';
+  }
 }
-async function startBicycleBusStyle(context){
-  if(gameEnded||v340BicycleDone||v340BicycleActive)return false;
-  v340BicycleDone=true;
-  v340BicycleActive=true;
+
+function showArrivalAfterCycleV341(){
+  const ev=shop(total);
+  applyPlayerStreet('front');
+  stopWalkFrames();
+  stopWalk();
+  const jump=document.getElementById('jumpBtn');
+  const enter=document.getElementById('enterShopBtn');
+  const next=document.getElementById('nextDiceBtn');
+  if(jump)jump.style.display='none';
+  if(enter)enter.style.display='inline-block';
+  if(next)next.style.display='none';
+  setShopSpeech('【'+safe(ev.shop)+'】<br>この店に入ってください。');
+}
+
+async function startBicycleV341(context){
+  if(gameEnded||v341CycleStarted||v341CycleActive)return false;
+  v341CycleStarted=true;
+  v341CycleActive=true;
   beginPriorityEvent('bicycle');
-  v340HideNormalControls();
-  const isArrivalContext=context==='arrival';
+  hideCycleControlsV341();
+  const isArrival=context==='arrival';
   try{
-    if(!isArrivalContext)freezeStreetMotionForEvent();
+    if(!isArrival)freezeStreetMotionForEvent();
     stopWalkFrames();
     stopWalk();
     setShopSpeech('自転車が来ました！');
-    const bike=v340BicycleImg('v340BicyclePlugin','bicycle-1.png');
-    const police=v340BicycleImg('v340PolicemanPlugin','policeman.png');
-    let frame=0;
+    const bike=v341CycleImage('cycleV341Sprite','bicycle-1.png');
+    const police=v341CycleImage('policeV341Sprite','policeman.png');
     Object.assign(bike.style,{
       left:'1700px',
       bottom:'40px',
@@ -5444,9 +5637,10 @@ async function startBicycleBusStyle(context){
       opacity:'1',
       transition:'none'
     });
-    v340PlayBicycleBellOnce();
-    v340BicycleFrameTimer=setInterval(()=>{
-      if(!v340BicycleActive||paused)return;
+    await playBellV341();
+    let frame=0;
+    v341CycleFrameTimer=setInterval(()=>{
+      if(!v341CycleActive||paused)return;
       frame=(frame+1)%3;
       bike.src=ASSET_PREFIX+'bicycle-'+(frame+1)+'.png';
     },180);
@@ -5454,73 +5648,145 @@ async function startBicycleBusStyle(context){
     bike.style.transition='left 4200ms linear';
     bike.style.left='520px';
     await rawWait(4200);
-    if(gameEnded||!v340BicycleActive)return false;
+    if(gameEnded||!v341CycleActive)return false;
     bike.style.transition='none';
     bike.style.left='520px';
-    if(v340BicycleFrameTimer)clearInterval(v340BicycleFrameTimer);
-    v340BicycleFrameTimer=null;
+    if(v341CycleFrameTimer)clearInterval(v341CycleFrameTimer);
+    v341CycleFrameTimer=null;
     police.style.display='block';
-    stopWalkFrames();
-    stopWalk();
     await rawWait(500);
     const policeText='こら！二人乗り禁止　罰金3000円';
     setShopSpeech('「'+safe(policeText)+'」');
     await speak('こら、ふたりのりきんし、ばっきんさんぜんえん','male');
     money-=3000;
     syncHud();
-    await rawWait(1000);
+    await rawWait(500);
+    bike.style.transition='left 2200ms linear';
+    bike.style.left='-620px';
+    await rawWait(2200);
     return true;
-  }catch(e){
-    console.warn('V340 bicycle bus style error',e);
+  }catch(err){
+    console.warn('[V341 bicycle event error]',err);
     return false;
   }finally{
-    v340RemoveBicycleBusStyle();
-    endPriorityEvent('bicycle');
+    stopBicycleV341(true);
     if(!gameEnded){
-      if(isArrivalContext){
-        if(typeof v308_base_arrive==='function')v308_base_arrive();
-        else arrive();
+      if(isArrival){
+        showArrivalAfterCycleV341();
       }else{
         resumeStreetMotionForEvent();
         playWalk();
-        startWalkFrames($('playerStreet'));
+        startWalkFrames(document.getElementById('playerStreet'));
       }
     }
   }
 }
-scheduleBicycleForRange=function(from,goal){
-  if(v340BicycleTimer)clearTimeout(v340BicycleTimer);
-  v340BicycleTimer=null;
-  if(v340BicycleDone||gameEnded)return false;
-  from=Number(from);goal=Number(goal);
+
+function scheduleBicycleV341ForRange(from,goal){
+  if(v341CycleStartTimer)clearTimeout(v341CycleStartTimer);
+  v341CycleStartTimer=null;
+  if(v341CycleStarted||gameEnded)return false;
+  from=Number(from);
+  goal=Number(goal);
   if(!(from<25&&goal>=25))return false;
   const delay=Math.max(600,(25-from)*5000-1000);
-  v340BicycleTimer=setTimeout(()=>{
-    v340BicycleTimer=null;
-    if(!gameEnded&&!v340BicycleDone)startBicycleBusStyle('crossing');
+  v341CycleStartTimer=setTimeout(()=>{
+    v341CycleStartTimer=null;
+    if(!gameEnded&&!v341CycleStarted)startBicycleV341('crossing');
   },delay);
   return true;
+}
+
+const v341BaseScheduleBicycleForRange=scheduleBicycleForRange;
+scheduleBicycleForRange=function(from,goal){
+  return scheduleBicycleV341ForRange(from,goal);
 };
-const v340BaseStartGame=startGame;
-startGame=async function(){
-  v340BicycleDone=false;
-  v340RemoveBicycleBusStyle();
-  return await v340BaseStartGame.apply(this,arguments);
-};
-const v340BaseGotoTotal=gotoTotal;
-gotoTotal=function(){
-  v340BicycleDone=false;
-  v340RemoveBicycleBusStyle();
-  return v340BaseGotoTotal.apply(this,arguments);
-};
+
+const v341BaseArrive=arrive;
 arrive=function(){
-  if(Number(total)===25&&!v340BicycleDone&&!v340BicycleActive&&!gameEnded){
-    startBicycleBusStyle('arrival');
+  if(Number(total)===25&&!v341CycleStarted&&!v341CycleActive&&!gameEnded){
+    startBicycleV341('arrival');
     return;
   }
-  if(typeof v308_base_arrive==='function')return v308_base_arrive.apply(this,arguments);
-  return undefined;
+  return v341BaseArrive.apply(this,arguments);
 };
+
+const v341BaseResetEventRunState=resetEventRunState;
+resetEventRunState=function(){
+  stopBicycleV341(true);
+  v341CycleStarted=false;
+  return v341BaseResetEventRunState.apply(this,arguments);
+};
+
+const v341BaseStartGame=startGame;
+startGame=async function(){
+  stopBicycleV341(true);
+  v341CycleStarted=false;
+  return await v341BaseStartGame.apply(this,arguments);
+};
+
+const v341BaseGotoTotal=gotoTotal;
+gotoTotal=function(){
+  stopBicycleV341(true);
+  v341CycleStarted=false;
+  return v341BaseGotoTotal.apply(this,arguments);
+};
+
+function showInvestigationPanelV341(){
+  document.body.classList.add('v341-investigation');
+  const style=document.createElement('style');
+  style.textContent='body.v341-investigation #devToggle.v333-public-hidden,body.v341-investigation #devPanel.v333-public-hidden,body.v341-investigation #v315RunBtn.v333-public-hidden{display:block!important}';
+  document.head.appendChild(style);
+  ['devToggle','devPanel','v315RunBtn'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.classList.remove('v333-public-hidden');
+  });
+}
+
+function neutralizeLegacyBicycleV341(){
+  ['bicyclePlugin','policemanPlugin','v308BicyclePlugin','v308PolicemanPlugin'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.style.transition='none';
+      el.style.display='none';
+    }
+  });
+  try{
+    if(bicycleStartTimer)clearTimeout(bicycleStartTimer);
+    if(bicycleFrameTimer)clearInterval(bicycleFrameTimer);
+    if(bicycleMoveTimer)clearTimeout(bicycleMoveTimer);
+    if(bicycleMonitorTimer)cancelAnimationFrame(bicycleMonitorTimer);
+    if(bicycleEvadeTimer)clearTimeout(bicycleEvadeTimer);
+    if(bicyclePoliceTimer)clearTimeout(bicyclePoliceTimer);
+    bicycleStartTimer=null;
+    bicycleFrameTimer=null;
+    bicycleMoveTimer=null;
+    bicycleMonitorTimer=null;
+    bicycleEvadeTimer=null;
+    bicyclePoliceTimer=null;
+    bicycleActive=false;
+    bicyclePoliceStarted=false;
+    bicycleTriggered=true;
+    bicycleEventDone=null;
+    lastBicycleX=null;
+  }catch(e){}
+}
+
+stopBicycle=function(){neutralizeLegacyBicycleV341();};
+startBicycle=function(){neutralizeLegacyBicycleV341();return false;};
+startBicycleEvent=async function(){neutralizeLegacyBicycleV341();return false;};
+startPoliceEvent=async function(){neutralizeLegacyBicycleV341();return false;};
+monitorBicycle=function(){return;};
+playBellOnce=function(){return Promise.resolve(false);};
+if(typeof v305PlayPoliceBell==='function')v305PlayPoliceBell=function(){return Promise.resolve(false);};
+if(typeof v309PlayBicycleBell2==='function')v309PlayBicycleBell2=function(){return Promise.resolve(false);};
+if(typeof startV308BicycleEvent==='function')startV308BicycleEvent=async function(){neutralizeLegacyBicycleV341();return false;};
+if(typeof v308RemoveBicycleDom==='function')v308RemoveBicycleDom=function(){neutralizeLegacyBicycleV341();};
+
+setupBellUnlockV341();
+showInvestigationPanelV341();
+setTimeout(showInvestigationPanelV341,600);
+setTimeout(showInvestigationPanelV341,1500);
 
 try{
   downloadHtml=function(){
@@ -5532,7 +5798,7 @@ try{
     v333ApplyPublicModeToRoot(clone);
     const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
-    a.download='昭和商店街標準プラグイン版V340-bicycle-bus-style-rebuild.html';
+    a.download='昭和商店街標準プラグイン版V341-bicycle-complete-rebuild.html';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   };
 }catch(e){console.warn('V319 download patch failed',e);}
